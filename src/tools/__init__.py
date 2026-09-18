@@ -88,9 +88,13 @@ from src.tools.research import (
 )
 from src.tools.invest import (
     assess_idea,
+    cash_out,
+    funding_gate_status,
     implement_idea,
     invest,
     list_investments,
+    pause_funding,
+    resume_funding,
     update_investment_progress,
 )
 
@@ -160,6 +164,10 @@ DOMAIN_TOOLS: dict[str, list] = {
         implement_idea,
         list_investments,
         update_investment_progress,
+        cash_out,
+        funding_gate_status,
+        pause_funding,
+        resume_funding,
     ],
 }
 

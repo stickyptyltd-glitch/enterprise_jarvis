@@ -80,6 +80,9 @@ def test_portfolio_watchdog_metrics(fresh_store):
     assert WATCHDOG_METRICS["active_investments"](fresh_store.data) == 2
     assert WATCHDOG_METRICS["investments_at_risk"](fresh_store.data) == 1
     assert WATCHDOG_METRICS["investments_written_off"](fresh_store.data) == 1
+    assert WATCHDOG_METRICS["investments_matured"](fresh_store.data) == 0
+    fresh_store.data["investments"][2]["status"] = "matured"
+    assert WATCHDOG_METRICS["investments_matured"](fresh_store.data) == 1
     create_watchdog("portfolio_deployed", ">=", 5000)
     result = check_watchdogs()
     assert "ALERT: WATCHDOG WD-1 tripped" in result

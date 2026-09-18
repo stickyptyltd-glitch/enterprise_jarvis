@@ -30,7 +30,7 @@ all with live, persisted company data.
 | `research`    | Market intelligence — scrapes HN/Wikipedia/DuckDuckGo/Reddit for money-making ideas, records vettable opportunities |
 | `invest`      | Probability engine + capital deployment — multi-agent credibility, EPI scoring, funding, self-implemented systems |
 
-74 tools across 13 tool domains plus the consult agent.
+78 tools across 13 tool domains plus the consult agent.
 
 ## Architecture
 
@@ -85,7 +85,8 @@ alert to the notifications log (with a 60-minute cooldown so it doesn't spam).
 Metrics: bank balance, open receivables, overdue count, weighted pipeline,
 opportunity count, monthly payroll, headcount, active projects — plus
 **portfolio metrics**: deployed capital, active investments, investments at
-risk (past projected breakeven or untracked), and investments written off.
+risk (past projected breakeven or untracked), matured (awaiting cash-out), and
+investments written off.
 
 ### Autonomous layer (guardrails off)
 
@@ -182,6 +183,15 @@ research the best micro-saas opportunities for a bootstrapped company
 * The scheduler's `opportunities` job (see below) scores every unscored idea
   through the council and, only under `JARVIS_AUTONOMY=full`, auto-funds the
   ventures that clear the threshold and implements them.
+* **Cash out** — `cash_out` closes a deployed venture: the income it generated
+  flows back to the treasury (`+ROI` ledger entry), booking a profit or loss
+  against the deployed amount. Ventures that run past their projected breakeven
+  are **auto-matured** by the `portfolio_review` job and queued for settlement.
+* **Funding gate** — `pause_funding` / `resume_funding` / `funding_gate_status`
+  give governance control over capital deployment. Under full autonomy the gate
+  also **auto-pauses** when at-risk ventures exceed `JARVIS_EXPOSURE_LIMIT`, and
+  reopens once the book is settled — a hard stop against funding off a
+  deteriorating portfolio.
 
 ---
 
@@ -218,7 +228,9 @@ vars. Never commit your `.env` (it is git-ignored).
 ```
 
 * `finance` snapshot daily 09:00 · `overdue_invoices` daily 09:30
-* `opportunities` scoring/auto-funding daily 10:00 · `portfolio_review` daily 10:30
+* `opportunities` scoring/auto-funding daily 10:00 (honors the funding gate) ·
+  `portfolio_review` daily 10:30 (auto-matures, flags at-risk positions, and
+  feeds standing directives via `autonomous_learning` under full autonomy)
 * `watchdogs` sweep every 30 minutes
 
 ## Configuration
@@ -236,6 +248,7 @@ vars. Never commit your `.env` (it is git-ignored).
 | `JARVIS_VIABILITY_THRESHOLD` | `75` — EPI to auto-fund under full autonomy |
 | `JARVIS_MAX_INVESTMENT_SHARE` | `0.25` — max fraction of cash per autonomous investment |
 | `JARVIS_MAX_INVESTMENT_AMOUNT` | `0` (no cap) — hard per-idea spend ceiling, enforced by `invest` |
+| `JARVIS_EXPOSURE_LIMIT` | `1` — max at-risk ventures before the funding gate auto-pauses (`0` disables) |
 
 ## Data & persistence
 
@@ -272,7 +285,7 @@ ideas, investments.
 ./venv/bin/python -m pytest tests -q
 ```
 
-87 tests cover the offline scripted LLM (`FakeChatModel`),
+93 tests cover the offline scripted LLM (`FakeChatModel`),
 HITL approval/denial, every domain, seats/memory, watchdogs (incl. portfolio
 metrics), the builder sandbox, the decision engine, the credibility council,
 the probability engine (EPI/veto/cap thresholds), and the guardrail-off
@@ -299,5 +312,5 @@ src/
     decision.py      decision engine (briefs, matrices, ledger)
     research.py      market intelligence (web scraping, idea records)
     invest.py        probability engine (EPI), investing, self-implementing systems
-tests/               offline test suite (87 tests)
+tests/               offline test suite (93 tests)
 ```

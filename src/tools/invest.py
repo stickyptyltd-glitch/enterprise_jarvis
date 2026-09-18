@@ -68,6 +68,14 @@ def _idea(idea_id: str) -> dict | None:
     return None
 
 
+def _investment(investment_id: str) -> dict | None:
+    target = str(investment_id).strip().lower()
+    for record in STORE.data["investments"]:
+        if record["id"].lower() == target:
+            return record
+    return None
+
+
 def _council_llm():
     from src.agents.core import create_llm
 
@@ -382,6 +390,83 @@ def update_investment_progress(investment_id: str, note: str, status: str = "act
     STORE.notify(f"{record['id']}: status {previous} -> {status} — {note.strip()}")
     STORE.save()
     return f"{record['id']}: {previous} -> {status}. {len(record['notes'])} progress entries logged."
+
+
+def cash_out(investment_id: str, total_income: float, note: str = "") -> str:
+    """Settle a deployed venture: the income it generated flows back into the
+    treasury and the position closes (money in). If total_income falls short of
+    the deployed amount the difference is booked as a loss."""
+    try:
+        total_income = float(total_income)
+    except (TypeError, ValueError):
+        return "Error: total_income must be a number."
+    if total_income < 0:
+        return "Error: total_income cannot be negative."
+    record = _investment(investment_id)
+    if not record:
+        return f"Error: no investment '{investment_id}'."
+    if record["status"] not in ("active", "matured"):
+        return f"Error: {record['id']} is '{record['status']}' and cannot be cashed out."
+    amount = float(record["amount"])
+    company = STORE.data["company"]
+    company["bank_balance"] += total_income
+    profit = total_income - amount
+    record["status"] = "cashed_out"
+    record["returned"] = total_income
+    record["net_profit"] = round(profit, 2)
+    record["notes"].append(
+        {"at": STORE.timestamp(), "status": "cashed_out", "note": note.strip() or "position closed"}
+    )
+    STORE.data.setdefault("ledger", []).append(
+        {
+            "at": STORE.timestamp(),
+            "kind": "return",
+            "id": f"RT-{len([e for e in STORE.data.get('ledger', []) if e['kind'] == 'return']) + 1}",
+            "counterparty": record["idea_id"],
+            "amount": total_income,
+            "note": f"cash-out of {record['id']}",
+        }
+    )
+    idea = _idea(record["idea_id"])
+    title = idea["title"] if idea else record["idea_id"]
+    if profit >= 0:
+        label = f"net +{STORE.currency(profit)}"
+    else:
+        label = f"net loss {STORE.currency(-profit)}"
+    STORE.notify(f"{record['id']} cashed out ({title}): {STORE.currency(total_income)} returned, {label}.")
+    STORE.save()
+    return (
+        f"{record['id']} ('{title}') cashed out — {STORE.currency(total_income)} returned to treasury.\n"
+        f"  Deployed {STORE.currency(amount)} | {label} | new balance {STORE.currency(company['bank_balance'])}"
+    )
+
+
+def funding_gate_status() -> str:
+    """Report whether the autonomous funding gate is open or paused."""
+    gate = STORE.data.get("funding_gate")
+    if not isinstance(gate, dict) or not gate.get("paused"):
+        return "Funding gate: OPEN — deployed ventures are within limits, capital deployment allowed."
+    return f"Funding gate: PAUSED (since {gate.get('at', '?')}) — {gate.get('reason', 'no reason recorded')}"
+
+
+def pause_funding(reason: str = "") -> str:
+    """Halt all autonomous capital deployment until resumed (governance action)."""
+    STORE.data["funding_gate"] = {
+        "paused": True,
+        "at": STORE.timestamp(),
+        "reason": reason.strip() or "manual pause",
+    }
+    STORE.notify(f"Funding gate PAUSED — {reason.strip()}.")
+    STORE.save()
+    return funding_gate_status()
+
+
+def resume_funding() -> str:
+    """Reopen the funding gate after a pause (governance action)."""
+    STORE.data["funding_gate"] = {"paused": False, "at": STORE.timestamp(), "reason": "reopened"}
+    STORE.notify("Funding gate REOPENED.")
+    STORE.save()
+    return funding_gate_status()
 
 
 register_critical("invest")

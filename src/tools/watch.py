@@ -54,6 +54,7 @@ WATCHDOG_METRICS = {
     "portfolio_deployed": lambda d: sum(i["amount"] for i in d.get("investments", []) if i["status"] == "active"),
     "active_investments": lambda d: sum(1 for i in d.get("investments", []) if i["status"] == "active"),
     "investments_at_risk": _portfolio_at_risk,
+    "investments_matured": lambda d: sum(1 for i in d.get("investments", []) if i["status"] == "matured"),
     "investments_written_off": lambda d: sum(1 for i in d.get("investments", []) if i["status"] == "written_off"),
 }
 

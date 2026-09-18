@@ -13,7 +13,7 @@ is not provisioned.
 import argparse
 import asyncio
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable
 
 from src.config.settings import Settings
@@ -65,6 +65,34 @@ def job_opportunity_loop() -> str:
     llm = create_llm(settings)
     balance = STORE.data["company"]["bank_balance"]
 
+    at_risk = WATCHDOG_METRICS["investments_at_risk"](STORE.data)
+    gate = STORE.data.get("funding_gate")
+    gate = gate if isinstance(gate, dict) else {}
+    limit = settings.exposure_limit
+    if limit and not gate.get("paused") and at_risk > limit:
+        STORE.data["funding_gate"] = {
+            "paused": True,
+            "at": datetime.now().isoformat(timespec="minutes"),
+            "reason": f"{at_risk} investment(s) at risk exceeds allowed exposure {limit}",
+        }
+        STORE.notify(
+            f"Funding gate AUTO-PAUSED: {at_risk} venture(s) at risk exceed exposure limit {limit}. "
+            "Settle the book before deploying more capital."
+        )
+        STORE.save()
+        body += f"\n  FUNDING AUTO-PAUSED — {at_risk} investment(s) at risk > exposure limit {limit}"
+        gate = STORE.data["funding_gate"]
+    elif gate.get("paused") and at_risk <= limit:
+        STORE.data["funding_gate"] = {
+            "paused": False,
+            "at": datetime.now().isoformat(timespec="minutes"),
+            "reason": "risk cleared",
+        }
+        STORE.notify("Funding gate reopened — no ventures at risk.")
+        STORE.save()
+        body += "\n  funding gate reopened (risk cleared)"
+        gate = STORE.data["funding_gate"]
+
     unscored = [i for i in STORE.data["ideas"] if i["status"] == "proposed" and not i.get("assessment")]
     for idea in unscored:
         try:
@@ -81,7 +109,11 @@ def job_opportunity_loop() -> str:
                 ", ".join(i['id'] for i in pending)
             )
     else:
+        if gate.get("paused"):
+            body += f"\n  funding paused — gate closed ({gate.get('reason', 'no reason recorded')})"
         for idea in pending:
+            if gate.get("paused"):
+                break
             assessment = idea.get("assessment") or {}
             if assessment.get("epi", 0) < settings.viability_threshold:
                 continue
@@ -107,15 +139,43 @@ def job_opportunity_loop() -> str:
 
 
 def job_portfolio_review() -> str:
-    """Assess the deployed investment book: what is live, deployed, at risk, written off."""
+    """Review the deployed investment book: size it, auto-mature ventures past
+    their projected breakeven, flag at-risk positions, and — under full autonomy —
+    fold the findings into the standing directives via autonomous_learning."""
     data = STORE.data
     deployed = WATCHDOG_METRICS["portfolio_deployed"](data)
     active = WATCHDOG_METRICS["active_investments"](data)
-    at_risk = WATCHDOG_METRICS["investments_at_risk"](data)
+    at_risk_snapshot = WATCHDOG_METRICS["investments_at_risk"](data)
     written_off = WATCHDOG_METRICS["investments_written_off"](data)
+    matured = WATCHDOG_METRICS["investments_matured"](data)
+
+    now = datetime.now()
+    stamped = now.isoformat(timespec="minutes")
+    newly_matured = []
+    for inv in data.get("investments", []):
+        breakeven = inv.get("breakeven_months")
+        if inv.get("status") != "active" or not isinstance(breakeven, (int, float)):
+            continue
+        try:
+            start = datetime.fromisoformat(str(inv.get("at", "")))
+        except (TypeError, ValueError):
+            continue
+        if now - start >= timedelta(days=breakeven * 30.44):
+            inv["status"] = "matured"
+            inv["notes"].append({"at": stamped, "status": "matured", "note": "auto-matured at projected breakeven"})
+            newly_matured.append(inv["id"])
+    if newly_matured:
+        matured += len(newly_matured)
+        STORE.notify(
+            f"PORTFOLIO REVIEW: auto-matured {', '.join(newly_matured)} (past projected breakeven). "
+            "Settle them with cash_out to recover capital."
+        )
+        STORE.save()
+
+    at_risk = WATCHDOG_METRICS["investments_at_risk"](data)
     lines = [
         f"PORTFOLIO REVIEW — {STORE.currency(deployed)} deployed across {active} active investment(s) | "
-        f"at risk {at_risk} | written off {written_off}"
+        f"at risk {at_risk_snapshot} | matured {matured} | written off {written_off}"
     ]
     for inv in data.get("investments", []):
         notes = len(inv.get("notes", []) or [])
@@ -126,6 +186,13 @@ def job_portfolio_review() -> str:
     if at_risk:
         STORE.notify(f"PORTFOLIO REVIEW: {at_risk} investment(s) at risk (past breakeven or untracked).")
         STORE.save()
+        settings = Settings.from_env(require_key=False)
+        if settings.autonomy == "full":
+            from src.agents.autonomy import autonomous_learning
+
+            lines.append(
+                "  standing learning: " + autonomous_learning().splitlines()[0].split(": ", 1)[-1]
+            )
     report = "\n".join(lines)
     print(f"[{datetime.now().isoformat(timespec='minutes')}]\n{report}")
     return report

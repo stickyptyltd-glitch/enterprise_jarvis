@@ -95,6 +95,7 @@ DEFAULT_DATA = {
     "directives": [],
     "ideas": [],
     "investments": [],
+    "funding_gate": None,
 }
 
 
