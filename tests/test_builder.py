@@ -60,6 +60,8 @@ def test_generate_tool_registers_and_runs(fresh_store):
 
 
 def test_generated_tool_can_read_the_store(fresh_store):
+    fresh_store.data["company"]["bank_balance"] = 245000
+    fresh_store.save()
     src = (
         "from src.tools.base import STORE\n\n"
         "def cash_color():\n"

@@ -24,10 +24,10 @@ class _StubClassifyLLM:
 def test_decision_brief_grounds_in_live_metrics(fresh_store):
     brief = decision_brief("expand sales team")
     assert "Decision brief — expand sales team" in brief
-    assert "Cash balance" in brief and "245,000" in brief
+    assert "Cash balance" in brief and "0.00" in brief
     assert "Monthly payroll" in brief
     assert "runway" in brief
-    assert "Open receivables" in brief and "38,130" in brief
+    assert "Open receivables" in brief and "0.00" in brief
     assert "Active watchdogs" in brief
 
 

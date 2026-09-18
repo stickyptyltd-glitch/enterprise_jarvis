@@ -44,6 +44,8 @@ def test_full_autonomy_executes_critical_without_approval(engine_builder, fresh_
         settings=Settings(openai_api_key="test-key", autonomy="full"),
     )
     cfg = {"configurable": {"thread_id": "t-auto"}}
+    fresh_store.data["company"]["bank_balance"] = 245000
+    fresh_store.save()
     start = fresh_store.data["company"]["bank_balance"]
 
     state = _run(graph, cfg, "wire $5000 to ACME")
@@ -118,6 +120,8 @@ def test_check_watchdogs_auto_heals(fresh_store, tmp_path):
     set_generated_dir(tmp_path)
     reset_generated_registry()
     try:
+        fresh_store.data["invoices"][0]["amount"] = 40000
+        fresh_store.save()
         create_watchdog("open_receivables", ">", 35000)
         result = check_watchdogs(auto_heal=True)
         assert "ALERT: WATCHDOG WD-1 tripped" in result
@@ -135,6 +139,8 @@ def test_check_watchdogs_no_heal_by_default(fresh_store, tmp_path):
     set_generated_dir(tmp_path)
     reset_generated_registry()
     try:
+        fresh_store.data["invoices"][0]["amount"] = 40000
+        fresh_store.save()
         create_watchdog("open_receivables", ">", 35000)
         result = check_watchdogs()
         assert "AUTONOMOUS MITIGATION" not in result

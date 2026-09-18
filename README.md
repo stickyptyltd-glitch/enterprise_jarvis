@@ -28,7 +28,7 @@ all with live, persisted company data.
 | `generated`   | Invoke the tools JARVIS authored |
 | `decide`      | Data-grounded decisions — metric briefs, weighted option matrices, decision ledger |
 
-61 tools across 11 tool domains plus the consult agent.
+63 tools across 11 tool domains plus the consult agent.
 
 ## Architecture
 
@@ -185,8 +185,10 @@ vars. Never commit your `.env` (it is git-ignored).
 
 Everything is a JSON-backed document store (`src/store.py`) seeded with a
 realistic company (invoices, employees, leads, pipeline, projects, revenue,
-executive roster). Every mutation saves to disk; new collections are
-auto-backfilled when you upgrade.
+executive roster). The seed starts with **all mock funds at $0** — a blank
+treasury, so funds-transfer flows begin in the insufficient-funds state until
+you add money. Every mutation saves to disk; new collections are auto-backfilled
+when you upgrade.
 
 State collections: company, invoices, employees, roles, leads, customers,
 opportunities, projects, tasks, expenses, revenue, schedule, ai_agents,

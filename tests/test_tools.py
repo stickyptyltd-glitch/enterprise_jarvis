@@ -12,18 +12,21 @@ def _balance(store):
 
 
 def test_finance_balance_and_transfer(fresh_store):
-    assert "245,000" in check_balance()
-    start = _balance(fresh_store)
+    assert "0.00" in check_balance()
+    assert "insufficient" in transfer_funds(5000, "ACME").lower()
+    assert _balance(fresh_store) == 0
+    fresh_store.data["company"]["bank_balance"] = 245000
+    fresh_store.save()
     result = transfer_funds(5000, "ACME")
     assert "transferred $5,000.00" in result
-    assert _balance(fresh_store) == start - 5000
+    assert _balance(fresh_store) == 240000
     assert fresh_store.data["notifications"]
 
 
 def test_transfer_rejects_insufficient_funds(fresh_store):
     result = transfer_funds(10_000_000, "ACME")
     assert "insufficient" in result.lower()
-    assert _balance(fresh_store) == 245000
+    assert _balance(fresh_store) == 0
 
 
 def test_pay_invoice_and_approve_expense(fresh_store):
@@ -34,7 +37,7 @@ def test_pay_invoice_and_approve_expense(fresh_store):
 
 def test_hr_raise_hire_terminate(fresh_store):
     result = give_raise("E-001", 10000)
-    assert "$205,000" in result or "205000" in result
+    assert "$10,000" in result
     hire = hire_employee("Staff Engineer", 120000)
     assert "Created employee E-105" in hire
     assert "terminated" in terminate_employee("E-002").lower()

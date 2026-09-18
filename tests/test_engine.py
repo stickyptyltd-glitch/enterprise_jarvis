@@ -14,6 +14,11 @@ def _last_ai(messages):
     return None
 
 
+def _fund(store, amount=245000):
+    store.data["company"]["bank_balance"] = amount
+    store.save()
+
+
 def _run(graph, config, text, approved=False):
     list(graph.stream({"messages": [("user", text)], "next_agent": "", "approved": approved}, config, stream_mode="values"))
     return graph.get_state(config)
@@ -74,6 +79,7 @@ def test_critical_wire_transfer_interrupts_for_approval(engine_builder, fresh_st
         _finance_worker(agent_calls),
     )
     cfg = {"configurable": {"thread_id": "t-wire"}}
+    _fund(fresh_store)
     start = fresh_store.data["company"]["bank_balance"]
 
     state = _run(graph, cfg, "transfer $5000 to ACME")
@@ -97,6 +103,7 @@ def test_critical_transfer_denied_executes_nothing(engine_builder, fresh_store):
         _finance_worker(agent_calls),
     )
     cfg = {"configurable": {"thread_id": "t-deny"}}
+    _fund(fresh_store)
     start = fresh_store.data["company"]["bank_balance"]
 
     state = _run(graph, cfg, "wire $5000 to ACME")

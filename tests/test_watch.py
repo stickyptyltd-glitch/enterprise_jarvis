@@ -30,7 +30,7 @@ def test_watchdog_fires_when_tripped(fresh_store):
     before = len(fresh_store.data["notifications"])
     result = check_watchdogs()
     assert "ALERT: WATCHDOG WD-1 tripped" in result
-    assert "245,000" in result
+    assert "current 0" in result
     assert len(fresh_store.data["notifications"]) == before + 1
     assert fresh_store.data["watchdogs"][0]["last_fired"] is not None
 
@@ -58,7 +58,7 @@ def test_counts_metrics_and_info(fresh_store):
     assert "active_employees" in watchdog_metrics()
     assert "weighted_pipeline" in watchdog_metrics()
     create_watchdog("active_employees", ">=", 1)
-    create_watchdog("monthly_payroll", ">=", 100000)
+    create_watchdog("monthly_payroll", ">=", 0)
     result = check_watchdogs()
     assert result.count("ALERT") == 2
     create_watchdog("weighted_pipeline", ">", 1000000)
