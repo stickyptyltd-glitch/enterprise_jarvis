@@ -108,6 +108,8 @@ def _duckduckgo(query: str) -> list[dict]:
         if not url_m:
             continue
         href = unescape(url_m.group(1))
+        if "y.js" in href or "ad_provider" in href:
+            continue  # duckduckgo sponsored links are not market signals
         uddg = re.search(r"[?&]uddg=([^&]+)", href)
         url = unquote(unescape(uddg.group(1))) if uddg else href
         results.append(
