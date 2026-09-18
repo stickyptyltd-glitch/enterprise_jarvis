@@ -1,5 +1,7 @@
 """Tests for the probability engine: EPI scoring, council vetoes, and the invest/implement pipeline."""
 
+from datetime import datetime, timedelta
+
 import pytest
 
 from src.tools.builder import reset_generated_registry, set_generated_dir
@@ -114,6 +116,32 @@ def test_conditional_requires_explicit_force(fresh_store):
     fresh_store.save()
     assert "force=True" in invest("IV-001", 14000)
     assert "Invested $14,000.00" in invest("IV-001", 14000, force=True)
+
+
+def test_absolute_investment_cap(monkeypatch, fresh_store):
+    monkeypatch.setenv("JARVIS_MAX_INVESTMENT_AMOUNT", "2000")
+    _record(fresh_store)
+    assess_idea("IV-001", _credible(3))
+    fresh_store.data["company"]["bank_balance"] = 100000
+    fresh_store.save()
+    assert "per-idea cap" in invest("IV-001", 3000)
+    assert "Invested $2,000.00" in invest("IV-001", 2000)
+
+
+def test_portfolio_review_job_reports_at_risk(fresh_store):
+    days = lambda n: (datetime.now() - timedelta(days=n)).isoformat(timespec="minutes")
+    fresh_store.data["investments"] = [
+        {"id": "IS-001", "idea_id": "IV-001", "at": days(400), "amount": 5000, "status": "active", "breakeven_months": 3, "notes": []},
+        {"id": "IS-002", "idea_id": "IV-002", "at": days(10), "amount": 5000, "status": "active", "breakeven_months": 12, "notes": [{"note": "tracked"}]},
+    ]
+    fresh_store.save()
+    from src.cron import job_portfolio_review
+
+    report = job_portfolio_review()
+    assert "PORTFOLIO REVIEW" in report
+    assert "$10,000.00 USD deployed across 2 active" in report
+    assert "at risk 1" in report
+    assert fresh_store.data["notifications"][-1]["message"].startswith("PORTFOLIO REVIEW")
 
 
 def test_implement_turns_vetted_idea_into_operating_system(fresh_store):

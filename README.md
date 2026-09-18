@@ -83,7 +83,9 @@ alert me when bank balance < 200000
 The scheduler sweeps all active watchdogs every 30 minutes. A trip writes an
 alert to the notifications log (with a 60-minute cooldown so it doesn't spam).
 Metrics: bank balance, open receivables, overdue count, weighted pipeline,
-opportunity count, monthly payroll, headcount, active projects.
+opportunity count, monthly payroll, headcount, active projects — plus
+**portfolio metrics**: deployed capital, active investments, investments at
+risk (past projected breakeven or untracked), and investments written off.
 
 ### Autonomous layer (guardrails off)
 
@@ -152,8 +154,9 @@ research the best micro-saas opportunities for a bootstrapped company
   timeframe_months)` — always citing the external evidence it found.
 * The **credibility council** (`src/agents/council.py`) runs up to
   `JARVIS_COUNCIL_SIZE` independent LLM assessors, each with an adversarial
-  brief (market / operations / risk). A member who fails to produce a verdict
-  defaults to a veto, so silence never reads as consent.
+  brief (market / operations / risk / unit-economics / moat). A member who
+  fails to produce a verdict defaults to a veto, so silence never reads as
+  consent.
 * The **probability engine** (`assess_idea`) aggregates deterministically into
   an Expected Profitability Index (0–100). The same inputs always yield the
   same score:
@@ -215,7 +218,7 @@ vars. Never commit your `.env` (it is git-ignored).
 ```
 
 * `finance` snapshot daily 09:00 · `overdue_invoices` daily 09:30
-* `opportunities` scoring/auto-funding daily 10:00
+* `opportunities` scoring/auto-funding daily 10:00 · `portfolio_review` daily 10:30
 * `watchdogs` sweep every 30 minutes
 
 ## Configuration
@@ -232,6 +235,7 @@ vars. Never commit your `.env` (it is git-ignored).
 | `JARVIS_COUNCIL_SIZE`| `3` — independent assessors per idea (2–7)          |
 | `JARVIS_VIABILITY_THRESHOLD` | `75` — EPI to auto-fund under full autonomy |
 | `JARVIS_MAX_INVESTMENT_SHARE` | `0.25` — max fraction of cash per autonomous investment |
+| `JARVIS_MAX_INVESTMENT_AMOUNT` | `0` (no cap) — hard per-idea spend ceiling, enforced by `invest` |
 
 ## Data & persistence
 
@@ -268,10 +272,11 @@ ideas, investments.
 ./venv/bin/python -m pytest tests -q
 ```
 
-84 tests cover routing, the offline scripted LLM (`FakeChatModel`),
-HITL approval/denial, every domain, seats/memory, watchdogs, the builder
-sandbox, the decision engine, the credibility council, the probability engine
-(EPI/mitigation thresholds), and the guardrail-off autonomy layer.
+87 tests cover the offline scripted LLM (`FakeChatModel`),
+HITL approval/denial, every domain, seats/memory, watchdogs (incl. portfolio
+metrics), the builder sandbox, the decision engine, the credibility council,
+the probability engine (EPI/veto/cap thresholds), and the guardrail-off
+autonomy layer.
 
 ## Project layout
 
@@ -294,5 +299,5 @@ src/
     decision.py      decision engine (briefs, matrices, ledger)
     research.py      market intelligence (web scraping, idea records)
     invest.py        probability engine (EPI), investing, self-implementing systems
-tests/               offline test suite (84 tests)
+tests/               offline test suite (87 tests)
 ```

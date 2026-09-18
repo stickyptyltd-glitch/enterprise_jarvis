@@ -259,6 +259,9 @@ def invest(idea_id: str, amount: float, force: bool = False) -> str:
         return "Error: amount must be a number."
     if amount <= 0:
         return "Error: investment amount must be positive."
+    cap = Settings.from_env(require_key=False).max_investment_amount
+    if cap and amount > cap:
+        return f"Error: {STORE.currency(amount)} exceeds the per-idea cap of {STORE.currency(cap)}."
     capital = float(idea.get("required_capital", 0.0) or 0.0)
     if amount > capital:
         return f"Error: {STORE.currency(amount)} exceeds the plan's capital requirement of {STORE.currency(capital)}."

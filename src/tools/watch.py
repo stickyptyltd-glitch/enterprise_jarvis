@@ -19,6 +19,29 @@ OPS = {
 
 WATCHDOG_COOLDOWN_MINUTES = 60
 
+def _portfolio_at_risk(data: dict) -> int:
+    """Active investments past projected breakeven, or with no progress logged past half-breakeven."""
+    from datetime import datetime
+
+    now = datetime.now()
+    at_risk = 0
+    for inv in data.get("investments", []):
+        if inv.get("status") != "active":
+            continue
+        breakeven = inv.get("breakeven_months")
+        if breakeven is None:
+            continue
+        try:
+            start = datetime.fromisoformat(str(inv.get("at", "")))
+        except (TypeError, ValueError):
+            start = now
+        elapsed = max(0.0, (now - start).total_seconds() / (30.44 * 86400))
+        notes = len(inv.get("notes", []) or [])
+        if elapsed > breakeven or (notes == 0 and elapsed > breakeven * 0.5):
+            at_risk += 1
+    return at_risk
+
+
 WATCHDOG_METRICS = {
     "bank_balance": lambda d: d["company"]["bank_balance"],
     "open_receivables": lambda d: sum(i["amount"] for i in d["invoices"] if i["status"] in ("open", "overdue")),
@@ -28,6 +51,10 @@ WATCHDOG_METRICS = {
     "monthly_payroll": lambda d: sum(e["salary"] for e in d["employees"] if e["status"] == "active"),
     "active_employees": lambda d: sum(1 for e in d["employees"] if e["status"] == "active"),
     "active_projects": lambda d: sum(1 for p in d["projects"] if p["budget"] - p["spent"] > 0),
+    "portfolio_deployed": lambda d: sum(i["amount"] for i in d.get("investments", []) if i["status"] == "active"),
+    "active_investments": lambda d: sum(1 for i in d.get("investments", []) if i["status"] == "active"),
+    "investments_at_risk": _portfolio_at_risk,
+    "investments_written_off": lambda d: sum(1 for i in d.get("investments", []) if i["status"] == "written_off"),
 }
 
 

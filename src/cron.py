@@ -18,7 +18,7 @@ from typing import Callable
 
 from src.config.settings import Settings
 from src.tools import STORE, check_balance, get_cash_flow, kpi_dashboard, list_invoices
-from src.tools.watch import check_watchdogs
+from src.tools.watch import WATCHDOG_METRICS, check_watchdogs
 
 WATCHDOG_SWEEP_MINUTES = 30
 
@@ -85,9 +85,11 @@ def job_opportunity_loop() -> str:
             assessment = idea.get("assessment") or {}
             if assessment.get("epi", 0) < settings.viability_threshold:
                 continue
+            cap_amount = settings.max_investment_amount or float("inf")
             amount = min(
                 idea.get("required_capital", 0),
                 balance * settings.max_investment_share,
+                cap_amount,
             )
             if amount <= 0:
                 body += f"\n  {idea['id']}: no capital available to deploy"
@@ -104,17 +106,44 @@ def job_opportunity_loop() -> str:
     return body
 
 
+def job_portfolio_review() -> str:
+    """Assess the deployed investment book: what is live, deployed, at risk, written off."""
+    data = STORE.data
+    deployed = WATCHDOG_METRICS["portfolio_deployed"](data)
+    active = WATCHDOG_METRICS["active_investments"](data)
+    at_risk = WATCHDOG_METRICS["investments_at_risk"](data)
+    written_off = WATCHDOG_METRICS["investments_written_off"](data)
+    lines = [
+        f"PORTFOLIO REVIEW — {STORE.currency(deployed)} deployed across {active} active investment(s) | "
+        f"at risk {at_risk} | written off {written_off}"
+    ]
+    for inv in data.get("investments", []):
+        notes = len(inv.get("notes", []) or [])
+        be = f"{inv.get('breakeven_months', 0):.1f} mo" if isinstance(inv.get("breakeven_months"), (int, float)) else "n/a"
+        lines.append(
+            f"  {inv['id']} | {inv['status']} | {STORE.currency(inv['amount'])} | breakeven {be} | progress notes: {notes}"
+        )
+    if at_risk:
+        STORE.notify(f"PORTFOLIO REVIEW: {at_risk} investment(s) at risk (past breakeven or untracked).")
+        STORE.save()
+    report = "\n".join(lines)
+    print(f"[{datetime.now().isoformat(timespec='minutes')}]\n{report}")
+    return report
+
+
 JOBS: dict[str, Callable[[], str]] = {
     "finance": job_finance_snapshot,
     "overdue_invoices": job_overdue_invoices,
     "watchdogs": job_watchdog_sweep,
     "opportunities": job_opportunity_loop,
+    "portfolio_review": job_portfolio_review,
 }
 
 SCHEDULE: list[tuple[str, tuple[int, int]]] = [
     ("finance", (9, 0)),
     ("overdue_invoices", (9, 30)),
     ("opportunities", (10, 0)),
+    ("portfolio_review", (10, 30)),
 ]
 
 

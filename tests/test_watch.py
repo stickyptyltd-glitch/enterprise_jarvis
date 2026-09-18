@@ -1,6 +1,9 @@
 """Tests for the watchdog standing-monitor tools."""
 
+from datetime import datetime, timedelta
+
 from src.tools.watch import (
+    WATCHDOG_METRICS,
     check_watchdogs,
     create_watchdog,
     delete_watchdog,
@@ -63,3 +66,21 @@ def test_counts_metrics_and_info(fresh_store):
     assert result.count("ALERT") == 2
     create_watchdog("weighted_pipeline", ">", 1000000)
     assert "No active watchdog is currently tripping" not in check_watchdogs()
+
+
+def test_portfolio_watchdog_metrics(fresh_store):
+    days = lambda n: (datetime.now() - timedelta(days=n)).isoformat(timespec="minutes")
+    fresh_store.data["investments"] = [
+        {"id": "IS-001", "idea_id": "IV-001", "at": days(400), "amount": 5000, "status": "active", "breakeven_months": 3, "notes": []},
+        {"id": "IS-002", "idea_id": "IV-002", "at": days(10), "amount": 5000, "status": "active", "breakeven_months": 12, "notes": [{"note": "on track"}]},
+        {"id": "IS-003", "idea_id": "IV-003", "at": days(200), "amount": 2000, "status": "written_off", "breakeven_months": 6, "notes": []},
+    ]
+    fresh_store.save()
+    assert WATCHDOG_METRICS["portfolio_deployed"](fresh_store.data) == 10000
+    assert WATCHDOG_METRICS["active_investments"](fresh_store.data) == 2
+    assert WATCHDOG_METRICS["investments_at_risk"](fresh_store.data) == 1
+    assert WATCHDOG_METRICS["investments_written_off"](fresh_store.data) == 1
+    create_watchdog("portfolio_deployed", ">=", 5000)
+    result = check_watchdogs()
+    assert "ALERT: WATCHDOG WD-1 tripped" in result
+    assert "current 10,000" in result

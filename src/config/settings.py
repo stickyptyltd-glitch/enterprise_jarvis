@@ -59,6 +59,9 @@ class Settings:
     max_investment_share: float = field(
         default_factory=lambda: float(os.getenv("JARVIS_MAX_INVESTMENT_SHARE", "0.25"))
     )
+    max_investment_amount: float = field(
+        default_factory=lambda: float(os.getenv("JARVIS_MAX_INVESTMENT_AMOUNT", "0"))
+    )
 
     def require_api_key(self) -> "Settings":
         if not self.openai_api_key:

@@ -25,6 +25,8 @@ MEMBER_BRIEFS = (
     ("market analyst", "Evaluate real external demand: is there evidence customers want this, is the space crowded, is differentiation real? Penalize invented demand."),
     ("operational lead", "Evaluate executable reality: needed skills, people, workflow, and whether the projected unit economics could actually be achieved. Penalize hand-waved numbers."),
     ("risk & compliance", "Evaluate downside: failure modes, legal/regulatory exposure, sunk-cost traps, and whether the required capital could be lost outright. Default to skeptical."),
+    ("unit economist", "Stress-test the numbers themselves: is the projected monthly revenue achievable at realistic price, volume, and margin relative to the capital required? Penalize fantasy multiples."),
+    ("moat & strategy", "Evaluate defensibility: switching costs, network effects, distribution edges, or is this trivially copyable by a bigger player the moment it works?"),
 )
 
 FALLBACK_MEMBER = {"credible": False, "conviction": 1, "kill": True, "notes": "council member produced no parseable verdict"}
