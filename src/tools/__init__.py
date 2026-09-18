@@ -4,10 +4,12 @@ from src.tools.base import CRITICAL_TOOLS, STORE, set_store
 from src.tools.finance import (
     approve_expense,
     check_balance,
+    collect_invoice,
     get_cash_flow,
     list_expenses,
     list_invoices,
     pay_invoice,
+    receive_funds,
     transfer_funds,
 )
 from src.tools.human_resources import (
@@ -80,7 +82,7 @@ from src.tools.decision import (
 )
 
 DOMAIN_TOOLS: dict[str, list] = {
-    "finance": [check_balance, get_cash_flow, list_invoices, list_expenses, transfer_funds, pay_invoice, approve_expense],
+    "finance": [check_balance, get_cash_flow, list_invoices, list_expenses, transfer_funds, pay_invoice, approve_expense, receive_funds, collect_invoice],
     "hr": [
         list_employees,
         get_employee,

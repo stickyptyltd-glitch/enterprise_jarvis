@@ -1,7 +1,16 @@
 """Unit tests for the business tools and the store they mutate."""
 
-from src.tools import CRITICAL_TOOLS, DOMAIN_TOOLS
-from src.tools import approve_expense, check_balance, list_invoices, pay_invoice, transfer_funds
+from src.tools import (
+    CRITICAL_TOOLS,
+    DOMAIN_TOOLS,
+    approve_expense,
+    check_balance,
+    collect_invoice,
+    list_invoices,
+    pay_invoice,
+    receive_funds,
+    transfer_funds,
+)
 from src.tools.human_resources import give_raise, hire_employee, terminate_employee
 from src.tools.crm import add_lead, update_lead_stage
 from src.tools.operations import assign_task, create_task, update_progress
@@ -33,6 +42,25 @@ def test_pay_invoice_and_approve_expense(fresh_store):
     assert "paid" in pay_invoice("INV-1001").lower()
     assert list_invoices().count("paid") >= 2
     assert "approved" in approve_expense("X-5001").lower()
+
+
+def test_receive_funds_and_collect_invoice(fresh_store):
+    assert "insufficient" in transfer_funds(1000, "ACME").lower()
+    received = receive_funds(50000, "Northwind Traders", "contract milestone")
+    assert "Received $50,000.00" in received
+    assert _balance(fresh_store) == 50000
+    assert "must be positive" in receive_funds(-100, "x") and "must be positive" in receive_funds(0, "x")
+
+    fresh_store.data["invoices"][0]["amount"] = 40000
+    fresh_store.save()
+    collected = collect_invoice("INV-1001")
+    assert "Collected invoice INV-1001" in collected
+    assert _balance(fresh_store) == 90000 and fresh_store.data["invoices"][0]["status"] == "paid"
+    assert "already paid" in collect_invoice("INV-1001")
+    assert "not found" in collect_invoice("INV-9999")
+
+    kinds = [e["kind"] for e in fresh_store.data["ledger"]]
+    assert "deposit" in kinds and "receipt" in kinds
 
 
 def test_hr_raise_hire_terminate(fresh_store):

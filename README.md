@@ -15,7 +15,7 @@ all with live, persisted company data.
 
 | Domain        | Capabilities |
 |---------------|--------------|
-| `finance`     | Balance, cash flow, invoices, expenses, wire transfers, invoice payment, expense approval |
+| `finance`     | Balance, cash flow, invoices, expenses, wires, deposits, collections, invoice payment, expense approval |
 | `hr`          | Employees, open roles, PTO, payroll, raises, hires, terminations |
 | `crm`         | Leads, opportunities, pipeline, deal stages, closes |
 | `ops`         | Projects, tasks, assignees, delivery status, progress |
@@ -28,7 +28,7 @@ all with live, persisted company data.
 | `generated`   | Invoke the tools JARVIS authored |
 | `decide`      | Data-grounded decisions — metric briefs, weighted option matrices, decision ledger |
 
-63 tools across 11 tool domains plus the consult agent.
+65 tools across 11 tool domains plus the consult agent.
 
 ## Architecture
 
@@ -215,7 +215,7 @@ leadership_roles, notifications, watchdogs, seat_memories, decisions, directives
 ./venv/bin/python -m pytest tests -q
 ```
 
-70 tests cover routing, the offline scripted LLM (`FakeChatModel`),
+71 tests cover routing, the offline scripted LLM (`FakeChatModel`),
 HITL approval/denial, every domain, seats/memory, watchdogs, the builder
 sandbox, the decision engine, and the guardrail-off autonomy layer.
 
@@ -237,5 +237,5 @@ src/
     watch.py         watchdog monitors + autonomous mitigation (self-healing)
     builder.py       tool factory (sandboxed, or trust bypass)
     decision.py      decision engine (briefs, matrices, ledger)
-tests/               offline test suite (70 tests)
+tests/               offline test suite (71 tests)
 ```

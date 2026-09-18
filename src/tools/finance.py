@@ -70,9 +70,50 @@ def pay_invoice(invoice_id: str) -> str:
                 return f"Error: insufficient funds for invoice {inv['id']}."
             company["bank_balance"] -= inv["amount"]
             inv["status"] = "paid"
+            STORE.data.setdefault("ledger", []).append(
+                {"at": STORE.timestamp(), "kind": "payment", "id": f"PY-{len(STORE.data.get('ledger', [])) + 1}", "counterparty": inv["client"], "amount": -inv["amount"], "note": f"payment of {inv['id']}"}
+            )
             STORE.notify(f"Invoice {inv['id']} paid to {inv['client']} for {STORE.currency(inv['amount'])}.")
             STORE.save()
             return f"Paid invoice {inv['id']} ({inv['client']}) for {STORE.currency(inv['amount'])}. New balance: {STORE.currency(company['bank_balance'])}."
+    return f"Error: invoice {invoice_id} not found."
+
+
+def receive_funds(amount: float, source: str, note: str = "") -> str:
+    """Record an inbound deposit into the company bank account from a counterparty. Increases the cash balance and logs a deposit to the ledger."""
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return "Error: amount must be a number."
+    source = str(source).strip()
+    if amount <= 0:
+        return "Error: deposit amount must be positive."
+    company = STORE.data["company"]
+    company["bank_balance"] += amount
+    STORE.data.setdefault("ledger", []).append(
+        {"at": STORE.timestamp(), "kind": "deposit", "id": f"DP-{len(STORE.data.get('ledger', [])) + 1}", "counterparty": source or "unknown", "amount": amount, "note": note.strip() or "inbound funds"}
+    )
+    STORE.notify(f"Deposit of {STORE.currency(amount)} received from {source}.")
+    STORE.save()
+    return f"Received {STORE.currency(amount)} from {source}. New balance: {STORE.currency(company['bank_balance'])}."
+
+
+def collect_invoice(invoice_id: str) -> str:
+    """Collect an outstanding invoice: mark it paid and add its amount to the cash balance (money in)."""
+    for inv in STORE.data["invoices"]:
+        if inv["id"].upper() == str(invoice_id).upper():
+            if inv["status"] == "paid":
+                return f"Invoice {inv['id']} is already paid."
+            amount = inv["amount"]
+            company = STORE.data["company"]
+            company["bank_balance"] += amount
+            inv["status"] = "paid"
+            STORE.data.setdefault("ledger", []).append(
+                {"at": STORE.timestamp(), "kind": "receipt", "id": f"RC-{len(STORE.data.get('ledger', [])) + 1}", "counterparty": inv["client"], "amount": amount, "note": f"collection of {inv['id']}"}
+            )
+            STORE.notify(f"Invoice {inv['id']} collected from {inv['client']} for {STORE.currency(amount)}.")
+            STORE.save()
+            return f"Collected invoice {inv['id']} ({inv['client']}) for {STORE.currency(amount)}. New balance: {STORE.currency(company['bank_balance'])}."
     return f"Error: invoice {invoice_id} not found."
 
 
