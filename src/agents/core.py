@@ -88,6 +88,31 @@ KEYWORDS: dict[str, tuple[str, ...]] = {
     "ops": ("project", "task", "sprint", "milestone", "deadline", "assign", "deliverable", "operations", "ops"),
     "analytics": ("report", "kpi", "revenue", "analytics", "metric", "dashboard", "forecast", "statistics", "performance"),
     "comms": ("email", "schedule", "meeting", "calendar", "remind", "reminder", "message", "invite", "appointment"),
+    "research": (
+        "research",
+        "scrape",
+        "web research",
+        "market intelligence",
+        "business idea",
+        "business ideas",
+        "money-making",
+        "brainstorm",
+        "find me a way to make",
+        "money from the web",
+        "opportunities to make",
+    ),
+    "invest": (
+        "invest",
+        "investing",
+        "investment",
+        "probability engine",
+        "viability",
+        "credibility",
+        "fundable",
+        "should we fund",
+        "assess the idea",
+        "score the idea",
+    ),
 }
 
 CLASSIFIER_PROMPT = ChatPromptTemplate.from_messages(

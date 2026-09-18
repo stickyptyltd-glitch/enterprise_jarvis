@@ -27,8 +27,10 @@ all with live, persisted company data.
 | `builder`     | Self-authoring tools — JARVIS writes, validates, and hot-registers new tools |
 | `generated`   | Invoke the tools JARVIS authored |
 | `decide`      | Data-grounded decisions — metric briefs, weighted option matrices, decision ledger |
+| `research`    | Market intelligence — scrapes HN/Wikipedia/DuckDuckGo/Reddit for money-making ideas, records vettable opportunities |
+| `invest`      | Probability engine + capital deployment — multi-agent credibility, EPI scoring, funding, self-implemented systems |
 
-65 tools across 11 tool domains plus the consult agent.
+74 tools across 13 tool domains plus the consult agent.
 
 ## Architecture
 
@@ -132,6 +134,52 @@ cost / risk / time-to-impact / upside / strategic-fit matrix, and logs the
 outcome to a per-company **decision ledger** (`log_decision`,
 `list_decisions`, `update_decision_outcome`).
 
+### Market intelligence & the probability engine (`research` + `invest`)
+
+JARVIS can find money-making ideas on the live web, vet them with a panel of
+independent AI assessors, and — under full autonomy — fund and implement the
+winners itself:
+
+```
+research the best micro-saas opportunities for a bootstrapped company
+```
+
+* `web_research` scrapes public, no-auth sources (Hacker News, Wikipedia,
+  DuckDuckGo, Reddit) and returns deduplicated, current signals.
+* The `research` agent distills those signals into a structured opportunity —
+  `record_idea(title, summary, category, revenue_model, source_urls,
+  signal_strength, required_capital, projected_monthly_revenue,
+  timeframe_months)` — always citing the external evidence it found.
+* The **credibility council** (`src/agents/council.py`) runs up to
+  `JARVIS_COUNCIL_SIZE` independent LLM assessors, each with an adversarial
+  brief (market / operations / risk). A member who fails to produce a verdict
+  defaults to a veto, so silence never reads as consent.
+* The **probability engine** (`assess_idea`) aggregates deterministically into
+  an Expected Profitability Index (0–100). The same inputs always yield the
+  same score:
+
+| Factor          | Weight | Definition |
+|-----------------|:------:|------------|
+| economics       | 0.30   | (12-mo projected revenue × 0.7 margin haircut) ÷ required capital, saturating at a 3× multiple |
+| market signal   | 0.25   | recorder's 0..1 evidence strength, integrity-adjusted (claimed signal with no cited source is discounted) |
+| time-to-revenue | 0.15   | 1 − months/12 |
+| execution fit   | 0.15   | does the company already hold a matching seat/agent? |
+| council         | 0.15   | agreement × mean conviction (1–5) |
+
+  **Hard guards:** one council veto caps EPI at 45 (not fundable); two or more
+  vetoes cap it at 25 (rejected). Recommendations: EPI ≥
+  `JARVIS_VIABILITY_THRESHOLD` → fundable; 50–threshold → conditional (requires
+  explicit `force=True`); < 50 → rejected.
+* `invest` is a **critical, approval-gated** action that refuses to exceed the
+  plan's own capital requirement or the live treasury, and refuses a second
+  funding of the same venture.
+* `implement_idea` turns a vetted/funded venture into an operating system — a
+  generated tool that tracks its live numbers — letting JARVIS both decide and
+  run a money-making system end to end.
+* The scheduler's `opportunities` job (see below) scores every unscored idea
+  through the council and, only under `JARVIS_AUTONOMY=full`, auto-funds the
+  ventures that clear the threshold and implements them.
+
 ---
 
 ## Setup
@@ -167,6 +215,7 @@ vars. Never commit your `.env` (it is git-ignored).
 ```
 
 * `finance` snapshot daily 09:00 · `overdue_invoices` daily 09:30
+* `opportunities` scoring/auto-funding daily 10:00
 * `watchdogs` sweep every 30 minutes
 
 ## Configuration
@@ -180,6 +229,9 @@ vars. Never commit your `.env` (it is git-ignored).
 | `JARVIS_DATA_FILE`   | `<project>/data/jarvis_business.json`              |
 | `JARVIS_AUTONOMY`    | `none` — set `full` to drop the approval gate       |
 | `JARVIS_TRUST_TOOLS` | `0` — set `1` to skip sandbox validation            |
+| `JARVIS_COUNCIL_SIZE`| `3` — independent assessors per idea (2–7)          |
+| `JARVIS_VIABILITY_THRESHOLD` | `75` — EPI to auto-fund under full autonomy |
+| `JARVIS_MAX_INVESTMENT_SHARE` | `0.25` — max fraction of cash per autonomous investment |
 
 ## Data & persistence
 
@@ -192,13 +244,14 @@ when you upgrade.
 
 State collections: company, invoices, employees, roles, leads, customers,
 opportunities, projects, tasks, expenses, revenue, schedule, ai_agents,
-leadership_roles, notifications, watchdogs, seat_memories, decisions, directives.
+leadership_roles, notifications, watchdogs, seat_memories, decisions, directives,
+ideas, investments.
 
 ## Safety model
 
 * High-risk actions (wires, invoice payment, expense approval, raises, hires,
-  PTO approval, terminations, deal closures, **tool generation**) require your
-  explicit approval every turn.
+  PTO approval, terminations, deal closures, **tool generation**, **investment
+  deployment**) require your explicit approval every turn.
 * Generated tool code is sandboxed by default: an AST walk bans dangerous
   imports (`os`, `sys`, `subprocess`, …), dangerous calls (`open`, `eval`,
   `exec`, `compile`, `input`, …), and anything that doesn't match the tool
@@ -215,21 +268,23 @@ leadership_roles, notifications, watchdogs, seat_memories, decisions, directives
 ./venv/bin/python -m pytest tests -q
 ```
 
-71 tests cover routing, the offline scripted LLM (`FakeChatModel`),
+84 tests cover routing, the offline scripted LLM (`FakeChatModel`),
 HITL approval/denial, every domain, seats/memory, watchdogs, the builder
-sandbox, the decision engine, and the guardrail-off autonomy layer.
+sandbox, the decision engine, the credibility council, the probability engine
+(EPI/mitigation thresholds), and the guardrail-off autonomy layer.
 
 ## Project layout
 
 ```
 src/
   main.py            interactive console + single-shot CLI
-  cron.py            scheduler (finance, overdue invoices, autonomous watchdog sweep)
+  cron.py            scheduler (finance, overdue invoices, opportunity loop, watchdog sweep)
   agents/
     core.py          LangGraph engine, supervisor routing, consult node
     seats.py         live executive seats (persona, memory, resolution)
     autonomy.py      JARVIS re-writes its own standing directives from incidents
-  config/settings.py env config + .env loader (autonomy, trust flags)
+    council.py       credibility council: independent multi-agent idea vetting
+  config/settings.py env config + .env loader (autonomy, trust, council, viability)
   store.py           thread-safe JSON datastore + seed data
   tools/
     base.py          shared store reference, critical-tool registry
@@ -237,5 +292,7 @@ src/
     watch.py         watchdog monitors + autonomous mitigation (self-healing)
     builder.py       tool factory (sandboxed, or trust bypass)
     decision.py      decision engine (briefs, matrices, ledger)
-tests/               offline test suite (71 tests)
+    research.py      market intelligence (web scraping, idea records)
+    invest.py        probability engine (EPI), investing, self-implementing systems
+tests/               offline test suite (84 tests)
 ```

@@ -110,6 +110,8 @@ def test_all_domains_exposed():
         "analytics",
         "comms",
         "leadership",
+        "research",
+        "invest",
         "watch",
         "builder",
         "generated",

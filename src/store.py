@@ -93,6 +93,8 @@ DEFAULT_DATA = {
     "seat_memories": {},
     "decisions": [],
     "directives": [],
+    "ideas": [],
+    "investments": [],
 }
 
 

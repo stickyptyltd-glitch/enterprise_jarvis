@@ -17,7 +17,7 @@ from datetime import datetime
 from typing import Callable
 
 from src.config.settings import Settings
-from src.tools import check_balance, get_cash_flow, kpi_dashboard, list_invoices
+from src.tools import STORE, check_balance, get_cash_flow, kpi_dashboard, list_invoices
 from src.tools.watch import check_watchdogs
 
 WATCHDOG_SWEEP_MINUTES = 30
@@ -52,15 +52,69 @@ def job_watchdog_sweep() -> str:
     return body
 
 
+def job_opportunity_loop() -> str:
+    """The autonomous opportunity pipeline: score every unscored idea through the
+    credibility council + probability engine, then — under full autonomy — fund the
+    ventures that clear the viability threshold and turn them into operating systems."""
+    from src.agents.council import run_council
+    from src.agents.core import create_llm
+    from src.tools.invest import assess_idea, implement_idea, invest
+
+    settings = Settings.from_env(require_key=False)
+    body = f"OPPORTUNITY LOOP (autonomy={settings.autonomy or 'none'})"
+    llm = create_llm(settings)
+    balance = STORE.data["company"]["bank_balance"]
+
+    unscored = [i for i in STORE.data["ideas"] if i["status"] == "proposed" and not i.get("assessment")]
+    for idea in unscored:
+        try:
+            council = run_council(idea, llm, size=settings.council_size)
+            verdict = assess_idea(idea["id"], council)
+            body += f"\n  scored {idea['id']}: " + verdict.splitlines()[1].strip()
+        except Exception as exc:
+            body += f"\n  council failed for {idea['id']}: {exc}"
+
+    pending = [i for i in STORE.data["ideas"] if i["status"] == "vetted"]
+    if settings.autonomy != "full":
+        if pending:
+            body += "\n  {}. awaiting owner approval to fund (JARVIS_AUTONOMY != full)".format(
+                ", ".join(i['id'] for i in pending)
+            )
+    else:
+        for idea in pending:
+            assessment = idea.get("assessment") or {}
+            if assessment.get("epi", 0) < settings.viability_threshold:
+                continue
+            amount = min(
+                idea.get("required_capital", 0),
+                balance * settings.max_investment_share,
+            )
+            if amount <= 0:
+                body += f"\n  {idea['id']}: no capital available to deploy"
+                continue
+            try:
+                outcome = invest(idea["id"], amount)
+                balance = STORE.data["company"]["bank_balance"]
+                body += f"\n  {idea['id']}: {outcome.splitlines()[0]}"
+                body += "\n  " + implement_idea(idea["id"], description=f"autonomous system for {idea['title']}", execute=True).splitlines()[-1]
+            except Exception as exc:
+                body += f"\n  {idea['id']}: funding failed ({exc})"
+
+    print(f"[{datetime.now().isoformat(timespec='minutes')}]\n{body}")
+    return body
+
+
 JOBS: dict[str, Callable[[], str]] = {
     "finance": job_finance_snapshot,
     "overdue_invoices": job_overdue_invoices,
     "watchdogs": job_watchdog_sweep,
+    "opportunities": job_opportunity_loop,
 }
 
 SCHEDULE: list[tuple[str, tuple[int, int]]] = [
     ("finance", (9, 0)),
     ("overdue_invoices", (9, 30)),
+    ("opportunities", (10, 0)),
 ]
 
 

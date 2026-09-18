@@ -80,6 +80,19 @@ from src.tools.decision import (
     log_decision,
     update_decision_outcome,
 )
+from src.tools.research import (
+    archive_idea,
+    list_ideas,
+    record_idea,
+    web_research,
+)
+from src.tools.invest import (
+    assess_idea,
+    implement_idea,
+    invest,
+    list_investments,
+    update_investment_progress,
+)
 
 DOMAIN_TOOLS: dict[str, list] = {
     "finance": [check_balance, get_cash_flow, list_invoices, list_expenses, transfer_funds, pay_invoice, approve_expense, receive_funds, collect_invoice],
@@ -134,6 +147,19 @@ DOMAIN_TOOLS: dict[str, list] = {
         list_decisions,
         update_decision_outcome,
         decisions_export,
+    ],
+    "research": [
+        web_research,
+        record_idea,
+        list_ideas,
+        archive_idea,
+    ],
+    "invest": [
+        assess_idea,
+        invest,
+        implement_idea,
+        list_investments,
+        update_investment_progress,
     ],
 }
 

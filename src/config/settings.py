@@ -50,6 +50,15 @@ class Settings:
     )
     autonomy: str = field(default_factory=lambda: os.getenv("JARVIS_AUTONOMY", "none").strip().lower())
     trust_tools: bool = field(default_factory=lambda: _as_bool(os.getenv("JARVIS_TRUST_TOOLS", "0")))
+    council_size: int = field(
+        default_factory=lambda: max(2, min(7, int(os.getenv("JARVIS_COUNCIL_SIZE", "3"))))
+    )
+    viability_threshold: float = field(
+        default_factory=lambda: float(os.getenv("JARVIS_VIABILITY_THRESHOLD", "75"))
+    )
+    max_investment_share: float = field(
+        default_factory=lambda: float(os.getenv("JARVIS_MAX_INVESTMENT_SHARE", "0.25"))
+    )
 
     def require_api_key(self) -> "Settings":
         if not self.openai_api_key:
