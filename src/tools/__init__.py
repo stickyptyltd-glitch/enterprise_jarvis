@@ -107,7 +107,7 @@ from src.tools.payments import (
 )
 
 DOMAIN_TOOLS: dict[str, list] = {
-    "finance": [check_balance, get_cash_flow, list_invoices, list_expenses, transfer_funds, pay_invoice, approve_expense, receive_funds, collect_invoice],
+    "finance": [check_balance, get_cash_flow, list_invoices, list_expenses, transfer_funds, pay_invoice, approve_expense, receive_funds, collect_invoice, charge_customer, payout, payment_status, real_balance, sync_real_balance],
     "hr": [
         list_employees,
         get_employee,
@@ -188,7 +188,7 @@ DOMAIN_TOOLS: dict[str, list] = {
 
 CRITICAL_TOOLS: set[str] = set(CRITICAL_TOOLS)
 
-ALL_TOOLS: list = [tool for tools in DOMAIN_TOOLS.values() for tool in tools]
+ALL_TOOLS: list = list(dict.fromkeys(tool for tools in DOMAIN_TOOLS.values() for tool in tools))
 
 load_generated_modules()
 
