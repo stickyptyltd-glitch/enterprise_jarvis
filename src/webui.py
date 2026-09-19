@@ -164,7 +164,7 @@ a{color:var(--blue)}
 
 <div class="grid">
   <div class="panel"><h2>Investment book</h2><table><thead><tr><th>ID</th><th>Idea</th><th>Status</th><th>Amount</th><th>Breakeven</th><th>EPI</th><th>Notes</th></tr></thead><tbody id="investments"></tbody></table></div>
-  <div class="panel"><h2>Idea pipeline</h2><table><thead><tr><th>ID</th><th>Title</th><th>Status</th><th>EPI</th><th>Model</th><th>Cap</th></tr></thead><tbody id="ideas"></tbody></table></div>
+  <div class="panel"><h2>Idea pipeline <span class="count" id="ideacounts"></span></h2><table><thead><tr><th>ID</th><th>Title</th><th>Status</th><th>EPI</th><th>Model</th><th>Cap</th></tr></thead><tbody id="ideas"></tbody></table></div>
 </div>
 
 <div class="grid">
@@ -243,8 +243,10 @@ function render(s){
   $("ideas").innerHTML=s.ideas.map(i=>
     "<tr><td>"+i.id+'</td><td>'+esc(i.title)+'</td><td><span class="'+statusCls(i.status)+'">'+i.status+'</span></td><td>'+
     (i.epi?"<b>"+i.epi+"</b>":"—")+"</td><td>"+i.revenue_model+"</td><td>"+(i.required_capital?money(i.required_capital):"—")+"</td></tr>").join("");
-  $("invoices").innerHTML=s.invoices.map(i=>
-    "<tr><td>"+i.id+"</td><td>"+esc(i.client)+"</td><td>"+money(i.amount)+"</td><td><span class='"+statusCls(i.status)+"'>"+i.status+"</span></td><td>"+i.due+"</td></tr>").join("");
+$("invoices").innerHTML=s.invoices.map(i=>
+      "<tr><td>"+i.id+"</td><td>"+esc(i.client)+"</td><td>"+money(i.amount)+"</td><td><span class='"+statusCls(i.status)+"'>"+i.status+"</span></td><td>"+i.due+"</td></tr>").join("");
+    const ic=s.idea_counts||{};
+    $("ideacounts").textContent="· "+ic.total+" total · "+ic.proposed+" proposed · "+ic.vetted+" vetted · "+ic.funded+" funded · "+ic.implemented+" implemented · "+ic.rejected+" rejected";
   $("ledger").innerHTML=s.ledger.map(l=>
     "<tr><td>"+l.at+'</td><td>'+l.type+'</td><td style="color:'+(l.amount<0?"var(--red)":"var(--green)")+'">'+money(l.amount)+'</td><td class="count">'+esc(l.ref)+"</td></tr>").join("");
   $("notifications").innerHTML=s.notifications.length? s.notifications.map(n=>"<div style='margin:4px 0'><span class='count'>"+n.at+"</span> — "+esc(n.message)+"</div>").join("")
@@ -474,6 +476,12 @@ def state_snapshot(data: dict, settings: Settings) -> dict:
         ],
     }
 
+    idea_counts = {"total": len(data.get("ideas", [])), "proposed": 0, "vetted": 0, "funded": 0, "implemented": 0, "rejected": 0}
+    for idea in data.get("ideas", []):
+        status = idea.get("status", "")
+        if status in idea_counts:
+            idea_counts[status] += 1
+
     domains = []
     try:
         from src.agents.core import DOMAIN_AGENTS
@@ -515,6 +523,7 @@ def state_snapshot(data: dict, settings: Settings) -> dict:
         "notifications": notifications,
         "schedule": schedule,
         "domains": domains,
+        "idea_counts": idea_counts,
     }
 
 

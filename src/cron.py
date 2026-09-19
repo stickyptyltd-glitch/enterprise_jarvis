@@ -93,6 +93,19 @@ def job_opportunity_loop() -> str:
         body += "\n  funding gate reopened (risk cleared)"
         gate = STORE.data["funding_gate"]
 
+    proposed = [i for i in STORE.data["ideas"] if i["status"] == "proposed"]
+    vetted = [i for i in STORE.data["ideas"] if i["status"] == "vetted"]
+    room = settings.discovery_target - len(proposed) - len(vetted)
+    if settings.discovery_enabled and room > 0:
+        from src.agents.discovery import discover
+
+        try:
+            found = discover(settings, llm=llm, per_run=min(settings.discovery_per_run, room))
+            if found:
+                body += "\n  discovered: " + ", ".join(found)
+        except Exception as exc:
+            body += f"\n  discovery failed: {exc}"
+
     unscored = [i for i in STORE.data["ideas"] if i["status"] == "proposed" and not i.get("assessment")]
     for idea in unscored:
         try:
@@ -117,6 +130,7 @@ def job_opportunity_loop() -> str:
             assessment = idea.get("assessment") or {}
             if assessment.get("epi", 0) < settings.viability_threshold:
                 continue
+            balance = STORE.data["company"]["bank_balance"]
             cap_amount = settings.max_investment_amount or float("inf")
             amount = min(
                 idea.get("required_capital", 0),
@@ -128,7 +142,6 @@ def job_opportunity_loop() -> str:
                 continue
             try:
                 outcome = invest(idea["id"], amount)
-                balance = STORE.data["company"]["bank_balance"]
                 body += f"\n  {idea['id']}: {outcome.splitlines()[0]}"
                 body += "\n  " + implement_idea(idea["id"], description=f"autonomous system for {idea['title']}", execute=True).splitlines()[-1]
             except Exception as exc:

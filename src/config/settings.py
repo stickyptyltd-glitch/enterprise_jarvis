@@ -56,6 +56,16 @@ class Settings:
     viability_threshold: float = field(
         default_factory=lambda: float(os.getenv("JARVIS_VIABILITY_THRESHOLD", "75"))
     )
+    discovery_enabled: bool = field(default_factory=lambda: _as_bool(os.getenv("JARVIS_DISCOVERY", "1")))
+    discovery_queries: list = field(
+        default_factory=lambda: [q.strip() for q in os.getenv("JARVIS_DISCOVERY_QUERIES", "").split(",") if q.strip()]
+    )
+    discovery_per_run: int = field(
+        default_factory=lambda: max(1, min(5, int(os.getenv("JARVIS_DISCOVERY_PER_RUN", "2"))))
+    )
+    discovery_target: int = field(
+        default_factory=lambda: max(1, min(20, int(os.getenv("JARVIS_DISCOVERY_TARGET", "6"))))
+    )
     max_investment_share: float = field(
         default_factory=lambda: float(os.getenv("JARVIS_MAX_INVESTMENT_SHARE", "0.25"))
     )
