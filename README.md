@@ -246,8 +246,27 @@ vars. Never commit your `.env` (it is git-ignored).
 ./venv/bin/python -m src.main --domains        # list domains + tools
 ./venv/bin/python -m src.main --data-file path/to/business.json
 ./venv/bin/python -m src.main --autonomy full  # no-human gate (also JARVIS_AUTONOMY=full)
+./venv/bin/python -m src.webui                 # web dashboard on :8610 (localhost only)
 ./venv/bin/python jarvis_local.py              # legacy single-file launcher
 ```
+
+## Web dashboard
+
+`src.webui` is a dependency-free local dashboard (pure `http.server` + vanilla
+JS) that binds to `127.0.0.1` by default:
+
+```bash
+./venv/bin/python -m src.webui                 # http://127.0.0.1:8610
+./venv/bin/python -m src.webui --port 9000     # custom port
+```
+
+It renders the treasury, payments rail (mode/cap/providers), funding gate,
+investment book, idea pipeline, receivables, ledger, watchdogs, cron schedule,
+and every domain's tools — refreshed every 10s — plus an "Ask JARVIS" panel
+that runs the same graph as the console. Critical actions pause in the chat and
+ask you to Approve/Deny instead of blocking on a terminal prompt. Override the
+listen address with `JARVIS_WEBUI_BIND`/`JARVIS_WEBUI_PORT` (keep it loopback —
+the endpoint can execute every tool in the engine).
 
 ## Scheduler
 
@@ -321,7 +340,7 @@ ideas, investments.
 ./venv/bin/python -m pytest tests -q
 ```
 
-102 tests cover the offline scripted LLM (`FakeChatModel`),
+108 tests cover the offline scripted LLM (`FakeChatModel`),
 HITL approval/denial, every domain, seats/memory, watchdogs (incl. portfolio
 metrics), the builder sandbox, the decision engine, the credibility council,
 the probability engine (EPI/veto/cap thresholds), and the guardrail-off
@@ -333,6 +352,8 @@ autonomy layer.
 src/
   main.py            interactive console + single-shot CLI
   cron.py            scheduler (finance, overdue invoices, opportunity loop, watchdog sweep)
+  webui.py           local web dashboard (stdlib http.server, no framework)
+  payments.py        real-money rail (simulate/real/off, burn-wallet cap, providers)
   agents/
     core.py          LangGraph engine, supervisor routing, consult node
     seats.py         live executive seats (persona, memory, resolution)
@@ -348,5 +369,5 @@ src/
     decision.py      decision engine (briefs, matrices, ledger)
     research.py      market intelligence (web scraping, idea records)
     invest.py        probability engine (EPI), investing, self-implementing systems
-tests/               offline test suite (102 tests)
+tests/               offline test suite (108 tests)
 ```

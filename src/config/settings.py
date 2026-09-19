@@ -71,6 +71,8 @@ class Settings:
     real_spend_cap: float = field(
         default_factory=lambda: float(os.getenv("JARVIS_REAL_SPEND_CAP", "0"))
     )
+    webui_bind: str = field(default_factory=lambda: os.getenv("JARVIS_WEBUI_BIND", "127.0.0.1"))
+    webui_port: int = field(default_factory=lambda: int(os.getenv("JARVIS_WEBUI_PORT", "8610")))
 
     def require_api_key(self) -> "Settings":
         if not self.openai_api_key:

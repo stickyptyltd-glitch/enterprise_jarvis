@@ -91,3 +91,24 @@ def engine_builder(fresh_store):
 def _cleanup():
     yield
     FakeChatModel.agent_worker = None
+
+@pytest.fixture(autouse=True)
+def _offline_money_env(monkeypatch):
+    """Keep the suite hermetic regardless of a user's .env (JARVIS may run real-money).
+
+    Without this, a live Stripe key plus a burn-wallet cap in .env makes
+    finance/transfer assertions hit real-mode cap errors. Pin the suite to the
+    offline rail and drop provider keys unless a test overrides them.
+    """
+    monkeypatch.setenv("JARVIS_REAL_MONEY", "off")
+    monkeypatch.setenv("JARVIS_REAL_SPEND_CAP", "0")
+    for key in (
+        "STRIPE_SECRET_KEY",
+        "WISE_API_TOKEN",
+        "WISE_PROFILE_ID",
+        "WISE_SANDBOX",
+        "PLAID_ACCESS_TOKEN",
+        "PLAID_CLIENT_ID",
+        "PLAID_SECRET",
+    ):
+        monkeypatch.delenv(key, raising=False)
