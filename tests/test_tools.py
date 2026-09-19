@@ -112,6 +112,7 @@ def test_all_domains_exposed():
         "leadership",
         "research",
         "invest",
+        "payments",
         "watch",
         "builder",
         "generated",

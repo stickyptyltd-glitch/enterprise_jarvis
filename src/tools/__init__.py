@@ -98,6 +98,14 @@ from src.tools.invest import (
     update_investment_progress,
 )
 
+from src.tools.payments import (
+    charge_customer,
+    payout,
+    payment_status,
+    real_balance,
+    sync_real_balance,
+)
+
 DOMAIN_TOOLS: dict[str, list] = {
     "finance": [check_balance, get_cash_flow, list_invoices, list_expenses, transfer_funds, pay_invoice, approve_expense, receive_funds, collect_invoice],
     "hr": [
@@ -168,6 +176,13 @@ DOMAIN_TOOLS: dict[str, list] = {
         funding_gate_status,
         pause_funding,
         resume_funding,
+    ],
+    "payments": [
+        payment_status,
+        real_balance,
+        sync_real_balance,
+        charge_customer,
+        payout,
     ],
 }
 

@@ -65,6 +65,12 @@ class Settings:
     exposure_limit: int = field(
         default_factory=lambda: int(os.getenv("JARVIS_EXPOSURE_LIMIT", "1"))
     )
+    real_money: str = field(
+        default_factory=lambda: os.getenv("JARVIS_REAL_MONEY", "simulate").strip().lower()
+    )
+    real_spend_cap: float = field(
+        default_factory=lambda: float(os.getenv("JARVIS_REAL_SPEND_CAP", "0"))
+    )
 
     def require_api_key(self) -> "Settings":
         if not self.openai_api_key:

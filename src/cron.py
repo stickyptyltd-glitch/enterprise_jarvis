@@ -198,17 +198,28 @@ def job_portfolio_review() -> str:
     return report
 
 
+def job_reconcile() -> str:
+    """Pull the live rail balance and reconcile it into the treasury (no-op in simulate mode)."""
+    from src.tools.payments import sync_real_balance
+
+    report = sync_real_balance()
+    print(f"[{datetime.now().isoformat(timespec='minutes')}] RECONCILE\n{report}")
+    return report
+
+
 JOBS: dict[str, Callable[[], str]] = {
     "finance": job_finance_snapshot,
     "overdue_invoices": job_overdue_invoices,
+    "reconcile": job_reconcile,
     "watchdogs": job_watchdog_sweep,
     "opportunities": job_opportunity_loop,
     "portfolio_review": job_portfolio_review,
 }
 
 SCHEDULE: list[tuple[str, tuple[int, int]]] = [
-    ("finance", (9, 0)),
-    ("overdue_invoices", (9, 30)),
+    ("reconcile", (9, 15)),
+    ("finance", (9, 30)),
+    ("overdue_invoices", (9, 45)),
     ("opportunities", (10, 0)),
     ("portfolio_review", (10, 30)),
 ]

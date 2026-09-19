@@ -1,5 +1,6 @@
 """Finance domain tools: treasury visibility plus high-risk money movement."""
 
+from src import payments
 from src.tools.base import STORE, register_critical
 
 
@@ -48,14 +49,24 @@ def transfer_funds(amount: float, recipient: str) -> str:
         return "Error: transfer amount must be positive."
     if amount > company["bank_balance"]:
         return f"Error: insufficient funds (balance {STORE.currency(company['bank_balance'])})."
+    blocked = payments.burn_wallet(amount, "wire transfer")
+    if blocked:
+        return blocked
+    if payments.is_real():
+        result = payments.pay_recipient(amount, recipient)
+        if not result["ok"]:
+            return f"Error: {result.get('error', 'payout failed')} — no ledger change."
+        ref = f"{result['ref']}"
+    else:
+        ref = f"TX-{len(STORE.data.get('ledger', [])) + 1}"
     company["bank_balance"] -= amount
     ledger = "[outbound]"
     STORE.data.setdefault("ledger", []).append(
-        {"at": STORE.timestamp(), "kind": "payment", "id": f"TX-{len(STORE.data.get('ledger', [])) + 1}", "counterparty": recipient, "amount": -amount, "note": ledger}
+        {"at": STORE.timestamp(), "kind": "payment", "id": ref, "counterparty": recipient, "amount": -amount, "note": ledger}
     )
     STORE.notify(f"Wire transfer of {STORE.currency(amount)} to {recipient} executed.")
     STORE.save()
-    return f"Successfully transferred {STORE.currency(amount)} to {recipient}. New balance: {STORE.currency(company['bank_balance'])}."
+    return f"Successfully transferred {STORE.currency(amount)} to {recipient} — ref {ref}. New balance: {STORE.currency(company['bank_balance'])}."
 
 
 def pay_invoice(invoice_id: str) -> str:
@@ -68,14 +79,24 @@ def pay_invoice(invoice_id: str) -> str:
             company = STORE.data["company"]
             if inv["amount"] > company["bank_balance"]:
                 return f"Error: insufficient funds for invoice {inv['id']}."
+            blocked = payments.burn_wallet(inv["amount"], "invoice payment")
+            if blocked:
+                return blocked
+            if payments.is_real():
+                result = payments.pay_recipient(inv["amount"], inv["client"])
+                if not result["ok"]:
+                    return f"Error: {result.get('error', 'payout failed')} — invoice left open."
+                ref = f"{result['ref']}"
+            else:
+                ref = f"PY-{len(STORE.data.get('ledger', [])) + 1}"
             company["bank_balance"] -= inv["amount"]
             inv["status"] = "paid"
             STORE.data.setdefault("ledger", []).append(
-                {"at": STORE.timestamp(), "kind": "payment", "id": f"PY-{len(STORE.data.get('ledger', [])) + 1}", "counterparty": inv["client"], "amount": -inv["amount"], "note": f"payment of {inv['id']}"}
+                {"at": STORE.timestamp(), "kind": "payment", "id": ref, "counterparty": inv["client"], "amount": -inv["amount"], "note": f"payment of {inv['id']}"}
             )
             STORE.notify(f"Invoice {inv['id']} paid to {inv['client']} for {STORE.currency(inv['amount'])}.")
             STORE.save()
-            return f"Paid invoice {inv['id']} ({inv['client']}) for {STORE.currency(inv['amount'])}. New balance: {STORE.currency(company['bank_balance'])}."
+            return f"Paid invoice {inv['id']} ({inv['client']}) for {STORE.currency(inv['amount'])} — ref {ref}. New balance: {STORE.currency(company['bank_balance'])}."
     return f"Error: invoice {invoice_id} not found."
 
 
@@ -105,15 +126,22 @@ def collect_invoice(invoice_id: str) -> str:
             if inv["status"] == "paid":
                 return f"Invoice {inv['id']} is already paid."
             amount = inv["amount"]
+            if payments.is_real():
+                result = payments.charge_customer(amount, f"collection of {inv['id']} — {inv['client']}")
+                if not result["ok"]:
+                    return f"Error: {result.get('error', 'charge failed')} — invoice stays open."
+                ref = f"{result['ref']}"
+            else:
+                ref = f"RC-{len(STORE.data.get('ledger', [])) + 1}"
             company = STORE.data["company"]
             company["bank_balance"] += amount
             inv["status"] = "paid"
             STORE.data.setdefault("ledger", []).append(
-                {"at": STORE.timestamp(), "kind": "receipt", "id": f"RC-{len(STORE.data.get('ledger', [])) + 1}", "counterparty": inv["client"], "amount": amount, "note": f"collection of {inv['id']}"}
+                {"at": STORE.timestamp(), "kind": "receipt", "id": ref, "counterparty": inv["client"], "amount": amount, "note": f"collection of {inv['id']}"}
             )
             STORE.notify(f"Invoice {inv['id']} collected from {inv['client']} for {STORE.currency(amount)}.")
             STORE.save()
-            return f"Collected invoice {inv['id']} ({inv['client']}) for {STORE.currency(amount)}. New balance: {STORE.currency(company['bank_balance'])}."
+            return f"Collected invoice {inv['id']} ({inv['client']}) for {STORE.currency(amount)} — ref {ref}. New balance: {STORE.currency(company['bank_balance'])}."
     return f"Error: invoice {invoice_id} not found."
 
 

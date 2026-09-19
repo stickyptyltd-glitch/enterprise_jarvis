@@ -29,8 +29,9 @@ all with live, persisted company data.
 | `decide`      | Data-grounded decisions — metric briefs, weighted option matrices, decision ledger |
 | `research`    | Market intelligence — scrapes HN/Wikipedia/DuckDuckGo/Reddit for money-making ideas, records vettable opportunities |
 | `invest`      | Probability engine + capital deployment — multi-agent credibility, EPI scoring, funding, self-implemented systems |
+| `payments`    | Real-money rail — Stripe (charge), Wise (payouts), Plaid (live balance), burn-wallet cap, live reconciliation |
 
-78 tools across 13 tool domains plus the consult agent.
+83 tools across 14 tool domains plus the consult agent.
 
 ## Architecture
 
@@ -195,6 +196,32 @@ research the best micro-saas opportunities for a bootstrapped company
 
 ---
 
+## Real money (payments)
+
+By default every financial action edits the **simulated treasury** in the data
+file. The payments rail wires that ledger to real rails behind a switch:
+
+* `JARVIS_REAL_MONEY=simulate` (default) — charge/payout/balance calls return
+  previews (`sim_pi_...`, `sim_tx_...`) and never touch a wallet or the ledger.
+* `JARVIS_REAL_MONEY=real` — money actually moves. **Outbound** transfers
+  (`pay_invoice`, `transfer_funds`, autonomous `invest`) are hard-capped by
+  `JARVIS_REAL_SPEND_CAP` (the burn-wallet limit, `0` = no cap) **regardless of
+  autonomy level**; inbound collections (`collect_invoice`) charge the customer
+  card via Stripe. Any end-to-end mismatch leaves the invoice open and the
+  ledger untouched.
+* **Providers** — Stripe (`STRIPE_SECRET_KEY`), Wise (`WISE_API_TOKEN` +
+  `WISE_PROFILE_ID`), Plaid (`PLAID_ACCESS_TOKEN`). Enabled ones appear in
+  `payment_status`; absent providers are reported, never silently faked.
+* **Live treasury** — `real_balance` reads the linked account; `sync_real_balance`
+  reconciles it into the ledger as a `reconcile` entry (also the daily `reconcile`
+  cron job). Watchdogs keep watching local balances; reconcile keeps them honest.
+
+The rule of thumb: **simulate = the agent decides, real = the agent proposes —
+the cap decides.** Wire real credentials only once the entity + KYC exists, and
+keep the burn-wallet float small until you trust the loop.
+
+---
+
 ## Setup
 
 Requires Python 3.12+ and an OpenAI API key.
@@ -227,7 +254,8 @@ vars. Never commit your `.env` (it is git-ignored).
 ./venv/bin/python -m src.cron --run-once --job watchdogs
 ```
 
-* `finance` snapshot daily 09:00 · `overdue_invoices` daily 09:30
+* `reconcile` live-balance pull daily 09:15 · `finance` snapshot daily 09:30 ·
+  `overdue_invoices` daily 09:45
 * `opportunities` scoring/auto-funding daily 10:00 (honors the funding gate) ·
   `portfolio_review` daily 10:30 (auto-matures, flags at-risk positions, and
   feeds standing directives via `autonomous_learning` under full autonomy)
@@ -249,6 +277,11 @@ vars. Never commit your `.env` (it is git-ignored).
 | `JARVIS_MAX_INVESTMENT_SHARE` | `0.25` — max fraction of cash per autonomous investment |
 | `JARVIS_MAX_INVESTMENT_AMOUNT` | `0` (no cap) — hard per-idea spend ceiling, enforced by `invest` |
 | `JARVIS_EXPOSURE_LIMIT` | `1` — max at-risk ventures before the funding gate auto-pauses (`0` disables) |
+| `JARVIS_REAL_MONEY` | `simulate` — `simulate` previews moves, `real` executes through providers |
+| `JARVIS_REAL_SPEND_CAP` | `0` (no cap) — burn-wallet limit on real outbound moves |
+| `STRIPE_SECRET_KEY` | Stripe billing for `collect_invoice` (real mode) |
+| `WISE_API_TOKEN` + `WISE_PROFILE_ID` | Wise payouts for `pay_invoice`/`transfer_funds` (real mode) |
+| `PLAID_ACCESS_TOKEN` | live balance feed for `real_balance`/`sync_real_balance` (real mode) |
 
 ## Data & persistence
 
@@ -285,7 +318,7 @@ ideas, investments.
 ./venv/bin/python -m pytest tests -q
 ```
 
-93 tests cover the offline scripted LLM (`FakeChatModel`),
+102 tests cover the offline scripted LLM (`FakeChatModel`),
 HITL approval/denial, every domain, seats/memory, watchdogs (incl. portfolio
 metrics), the builder sandbox, the decision engine, the credibility council,
 the probability engine (EPI/veto/cap thresholds), and the guardrail-off
@@ -312,5 +345,5 @@ src/
     decision.py      decision engine (briefs, matrices, ledger)
     research.py      market intelligence (web scraping, idea records)
     invest.py        probability engine (EPI), investing, self-implementing systems
-tests/               offline test suite (93 tests)
+tests/               offline test suite (102 tests)
 ```
