@@ -112,9 +112,13 @@ def pay_recipient(amount: float, recipient: str = "") -> dict:
         return {"mode": MODE_SIMULATE, "ok": True, "ref": _sim_ref("tx"), "amount": amount}
     if "wise" not in providers():
         return {"mode": MODE_REAL, "ok": False, "error": "wise not configured (WISE_API_TOKEN + WISE_PROFILE_ID)"}
+    endpoint = os.getenv(
+        "WISE_API_URL",
+        "https://api.sandbox.transferwise.tech" if os.getenv("WISE_SANDBOX", "0").strip().lower() in ("1", "true", "yes", "on") else "https://api.transferwise.com",
+    )
     try:
         resp = _http_post(
-            "https://api.transferwise.com/v1/transfers",
+            f"{endpoint}/v1/transfers",
             headers={"Authorization": f"Bearer {os.getenv('WISE_API_TOKEN', '')}"},
             json={
                 "targetAccount": recipient,

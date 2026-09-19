@@ -1,5 +1,26 @@
 """Tests for the payments rail: simulate-by-default, burn-wallet cap, provider routing."""
 
+import pytest
+
+_MONEY_ENV = (
+    "JARVIS_REAL_MONEY",
+    "JARVIS_REAL_SPEND_CAP",
+    "STRIPE_SECRET_KEY",
+    "WISE_API_TOKEN",
+    "WISE_PROFILE_ID",
+    "WISE_SANDBOX",
+    "WISE_API_URL",
+    "PLAID_ACCESS_TOKEN",
+    "PLAID_CLIENT_ID",
+    "PLAID_SECRET",
+)
+
+
+@pytest.fixture(autouse=True)
+def _clean_money_env(monkeypatch):
+    for key in _MONEY_ENV:
+        monkeypatch.delenv(key, raising=False)
+
 
 class Resp:
     def __init__(self, status_code, payload=None):

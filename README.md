@@ -211,7 +211,10 @@ file. The payments rail wires that ledger to real rails behind a switch:
   ledger untouched.
 * **Providers** — Stripe (`STRIPE_SECRET_KEY`), Wise (`WISE_API_TOKEN` +
   `WISE_PROFILE_ID`), Plaid (`PLAID_ACCESS_TOKEN`). Enabled ones appear in
-  `payment_status`; absent providers are reported, never silently faked.
+  `payment_status`; absent providers are reported, never silently faked. Set
+  `WISE_SANDBOX=1` to point all payouts at `api.sandbox.transferwise.tech`;
+  Plaid already talks to its sandbox host. Stripe test keys are key-driven and
+  hit the same host as live.
 * **Live treasury** — `real_balance` reads the linked account; `sync_real_balance`
   reconciles it into the ledger as a `reconcile` entry (also the daily `reconcile`
   cron job). Watchdogs keep watching local balances; reconcile keeps them honest.
