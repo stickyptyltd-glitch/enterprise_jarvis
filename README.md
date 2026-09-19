@@ -262,11 +262,21 @@ JS) that binds to `127.0.0.1` by default:
 
 It renders the treasury, payments rail (mode/cap/providers), funding gate,
 investment book, idea pipeline, receivables, ledger, watchdogs, cron schedule,
-and every domain's tools — refreshed every 10s — plus an "Ask JARVIS" panel
-that runs the same graph as the console. Critical actions pause in the chat and
-ask you to Approve/Deny instead of blocking on a terminal prompt. Override the
-listen address with `JARVIS_WEBUI_BIND`/`JARVIS_WEBUI_PORT` (keep it loopback —
-the endpoint can execute every tool in the engine).
+and every domain's tools — refreshed every 10s — plus:
+
+- **Ask JARVIS** — runs the same graph as the console (with a thinking
+  placeholder and a timeout instead of a silent hang).
+- **Make money ⚡** — one-click live actions: charge a customer (real Stripe),
+  record a deposit, collect an invoice, close a deal.
+- **Job runner / tool console** — fire any cron job now, or call any tool with
+  JSON args.
+
+Critical actions — from the chat, the tool console, or the money panel — raise
+the **approval bar** (orange, top of page) and pause for Approve/Deny instead of
+blocking on a terminal prompt, or stalling invisibly. The bar reappears on
+refresh while a decision is still pending. Override the listen address with
+`JARVIS_WEBUI_BIND`/`JARVIS_WEBUI_PORT` (keep it loopback — the endpoint can
+execute every tool in the engine).
 
 ## Scheduler
 

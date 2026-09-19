@@ -84,6 +84,12 @@ button:disabled{opacity:.5;cursor:default}
 button.deny{background:var(--red);color:#180203}
 button.compact{padding:6px 12px;margin-top:4px}
 .domains{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px}
+.moneygrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:700px){.moneygrid{grid-template-columns:1fr}}
+.moneyact{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.moneyact .count{display:block;margin-top:2px}
+.mout{margin-top:8px;font-size:12px;white-space:pre-wrap;border-top:1px dashed var(--line);padding-top:6px;color:var(--fg)}
+.mout.ok{color:var(--green)}.mout.bad{color:var(--red)}
 .sched td:first-child{font-weight:600}
 .count{color:var(--mut)}
 .foot{color:var(--mut);font-size:11px;margin-top:18px;text-align:center}
@@ -97,6 +103,56 @@ a{color:var(--blue)}
   <span class="badge sim" id="gate">…</span>
   <span class="badge sim" id="payprov">…</span>
   <div style="margin-left:auto;color:var(--mut);font-size:12px" id="clock"></div>
+</div>
+
+<div id="approvalbar" style="display:none;background:rgba(245,185,66,.12);border:1px solid rgba(245,185,66,.5);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-weight:600">
+  🔒 <span id="approvalmsg">A critical action awaits your approval.</span>
+  <button id="bar_approve" class="compact" style="margin-left:10px">Approve</button>
+  <button id="bar_deny" class="deny compact">Deny</button>
+</div>
+
+<div class="panel" style="margin-bottom:18px;border-color:rgba(55,212,122,.35)">
+  <h2 style="color:var(--green)">Make money ⚡ — live actions on your rails</h2>
+  <div class="moneygrid">
+    <div class="moneyact">
+      <b>Charge a customer</b> <span class="count">real Stripe charge (money in)</span>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <input id="mc_amount" type="text" placeholder="amount" style="flex:1;min-width:70px;background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px">
+        <input id="mc_desc" type="text" placeholder="what for?" style="flex:2;background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px">
+        <button class="compact" id="mc_run">Charge</button>
+      </div>
+      <div class="mout" id="mc_out" style="display:none"></div>
+    </div>
+    <div class="moneyact">
+      <b>Record a deposit</b> <span class="count">cash in from a client/sale</span>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <input id="md_amount" type="text" placeholder="amount" style="flex:1;min-width:70px;background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px">
+        <input id="md_source" type="text" placeholder="from whom?" style="flex:2;background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px">
+        <button class="compact" id="md_run">Deposit</button>
+      </div>
+      <div class="mout" id="md_out" style="display:none"></div>
+    </div>
+    <div class="moneyact">
+      <b>Collect an invoice</b> <span class="count">move an outstanding invoice into cash</span>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <input id="mi_id" type="text" placeholder="invoice id, e.g. INV-1" style="flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px">
+        <button class="compact" id="mi_run">Collect</button>
+      </div>
+      <div class="mout" id="mi_out" style="display:none"></div>
+    </div>
+    <div class="moneyact">
+      <b>Close a deal</b> <span class="count">mark an opportunity won (needs approval)</span>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <input id="co_id" type="text" placeholder="opportunity id, e.g. OPP-1" style="flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px">
+        <select id="co_won" style="background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px">
+          <option value="won">won</option>
+          <option value="lost">lost</option>
+        </select>
+        <button class="compact" id="co_run">Close</button>
+      </div>
+      <div class="mout" id="co_out" style="display:none"></div>
+    </div>
+  </div>
 </div>
 
 <div class="metrics" id="metrics"></div>
@@ -215,26 +271,63 @@ async function refresh(){
     const r=await fetch("/api/state");const s=await r.json();
     sessionStorage.lastState||(sessionStorage.lastState="x");
     render(s);
+    if(s.pending)pendingUI(true,s.pending_desc);
   }catch(e){$("clock").textContent="state offline — retrying…";}
+}
+function out(el,text,bad){el.style.display="block";el.textContent=text;el.className="mout "+(bad?"bad":"ok");}
+function pendingUI(show,desc){
+  const bar=$("approvalbar");
+  $("approvalmsg").textContent=desc||"A critical action awaits your approval.";
+  bar.style.display=show?"block":"none";
+  $("tc_approve").style.display=show?"":"none";
+  $("tc_deny").style.display=show?"":"none";
 }
 async function doAsk(q){
   const send=$("send");send.disabled=true;
   msg(q,"user");
-  const r=await fetch("/api/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:q})});
-  const d=await r.json();
-  if(d.approval_required){
-    msg("⚠ CRITICAL ACTION REQUIRES YOUR APPROVAL — tools: "+(d.critical||[]).join(", ")+". Approve or deny below.","pending");
-    msg("Pending approval.","jarvis");
-  }else{msg(d.reply||(d.error||"no response"),"jarvis");}
-  $("send").disabled=false;
+  const think=msg("JARVIS is thinking…","jarvis");
+  const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),150000);
+  try{
+    const r=await fetch("/api/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:q}),signal:ctrl.signal});
+    const d=await r.json();
+    msgs.pop();/* remove thinking bubble */renderMsgs();
+    if(d.approval_required){
+      msg("⚠ CRITICAL ACTION REQUIRES YOUR APPROVAL — "+((d.critical||[]).join(", "))||"unspecified action"+". Decision bar is at the top of the page.","pending");
+      pendingUI(true,"Critical action: "+((d.critical||[]).join(", "))||"unspecified");
+    }else{msg(d.reply||(d.error||"no response"),"jarvis");}
+  }catch(e){
+    msgs.pop();renderMsgs();
+    msg("⚠ "+(e.name==="AbortError"?"JARVIS took too long — try again or use a tool directly.":"Request failed: "+e.message),"pending");
+  }finally{clearTimeout(t);$("send").disabled=false;}
 }
 async function decide(v){
+  pendingUI(false);
   const r=await fetch("/api/approve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({approve:v})});
   const d=await r.json();
   msg(v?"✔ Approved — executing now. ✅":"✖ Denied.","jarvis");
   msg(d.reply||d.error||"done","jarvis");
   refresh();
 }
+async function invokeMoney(domain,tool,args,outEl){
+  out(outEl,"Working…",false);
+  try{
+    const r=await fetch("/api/tool",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({domain,tool,args})});
+    const d=await r.json();
+    if(d.approval_required){
+      out(outEl,d.reply,false);
+      pendingUI(true,"Critical action: "+((d.critical||[]).join(", ")));
+    }else{out(outEl,d.reply||d.error||"done",!!(d.error||""));}
+  }catch(e){out(outEl,"Request failed: "+e.message,true);}
+}
+function bus(val){const n=parseFloat(val);return isNaN(n)?null:n;}
+$("mc_run").onclick=()=>invokeMoney("payments","charge_customer",
+  {amount:bus($("mc_amount").value),description:$("mc_desc").value||"sale"},$("mc_out"));
+$("md_run").onclick=()=>invokeMoney("finance","receive_funds",
+  {amount:bus($("md_amount").value),source:$("md_source").value||"client"},$("md_out"));
+$("mi_run").onclick=()=>invokeMoney("finance","collect_invoice",
+  {invoice_id:$("mi_id").value},$("mi_out"));
+$("co_run").onclick=()=>invokeMoney("crm","close_opportunity",
+  {opportunity_id:$("co_id").value,won:($("co_won").value==="won")},$("co_out"));
 let toolState={domain:"",tool:"",approval:false};
 function renderToolConsole(domains){
   const byTool=[];
@@ -262,8 +355,7 @@ async function runTool(){
     const d=await r.json();
     toolState={domain,tool,approval:!!d.approval_required};
     showToolOut(d.reply||d.error||"done",!!d.error);
-    $("tc_approve").style.display=toolState.approval?"":"none";
-    $("tc_deny").style.display=toolState.approval?"":"none";
+    pendingUI(toolState.approval,"Critical tool: "+tool);
   }
 }
 async function runJob(name){
@@ -279,8 +371,10 @@ function renderJobs(sch){
   $("jobbuttons").querySelectorAll("button").forEach(b=>b.onclick=()=>{b.disabled=true;runJob(b.dataset.j).finally(()=>b.disabled=false);});
 }
 $("tc_run").onclick=runTool;
-$("tc_approve").onclick=async()=>{const r=await fetch("/api/approve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({approve:true})});const d=await r.json();showToolOut(d.reply,(d.error||"").length>0);$("tc_approve").style.display="none";$("tc_deny").style.display="none";toolState.approval=false;};
-$("tc_deny").onclick=async()=>{const r=await fetch("/api/approve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({approve:false})});const d=await r.json();showToolOut(d.reply,(d.error||"").length>0);$("tc_approve").style.display="none";$("tc_deny").style.display="none";toolState.approval=false;};
+$("tc_approve").onclick=()=>decide(true);
+$("tc_deny").onclick=()=>decide(false);
+$("bar_approve").onclick=()=>decide(true);
+$("bar_deny").onclick=()=>decide(false);
 function onSend(){
   const q=$("query").value.trim();if(!q)return;$("query").value="";doAsk(q);
 }
@@ -557,7 +651,17 @@ def live_state() -> dict:
     from src.tools import STORE
 
     settings = Settings.from_env(require_key=False)
-    return state_snapshot(STORE.data, settings)
+    state = state_snapshot(STORE.data, settings)
+    with _LOCK:
+        if _PENDING_TOOL is not None:
+            state["pending"] = True
+            state["pending_desc"] = f"Critical tool {_PENDING_TOOL['name']} is staged — Approve to execute it."
+        elif _APPROVAL_PENDING is not None:
+            state["pending"] = True
+            state["pending_desc"] = f"Critical action {(_APPROVAL_PENDING.get('critical') or [])} is staged — Approve to resume it."
+        else:
+            state["pending"] = False
+    return state
 
 
 class Handler(BaseHTTPRequestHandler):
