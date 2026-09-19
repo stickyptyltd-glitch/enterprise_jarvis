@@ -136,3 +136,102 @@ def test_http_unknown_route_404(server):
     with pytest.raises(urllib.error.HTTPError) as err:
         urllib.request.urlopen(server + "/nope", timeout=5)
     assert err.value.code == 404
+
+
+def test_run_job_executes_finance(fresh_store):
+    import src.webui as webui
+
+    webui._STORE_READY = True
+    result = webui.run_job("finance")
+    assert result["ok"] is True
+    assert isinstance(result["output"], str) and result["output"].strip()
+
+
+def test_run_job_unknown_name():
+    import src.webui as webui
+
+    assert webui.run_job("nonexistent-job")["ok"] is False
+
+
+def test_run_tool_executes_noncritical(fresh_store):
+    import src.webui as webui
+
+    result = webui.run_tool("finance", "check_balance", {})
+    assert result["approval_required"] is False
+    assert result["reply"]
+
+
+def test_run_tool_critical_pauses_for_approval(fresh_store):
+    import src.webui as webui
+
+    webui._PENDING_TOOL = None
+    result = webui.run_tool("finance", "transfer_funds", {"amount": 10, "recipient": "x"})
+    assert result["approval_required"] is True
+    assert result["critical"] == ["transfer_funds"]
+    executed = webui.approve_resume(True)
+    assert "not executed" not in executed
+    # decision row cleared after the direct tool run
+    assert webui.approve_resume(False) == "No action is pending approval."
+
+
+def test_run_tool_bad_args_rejected(fresh_store):
+    import src.webui as webui
+
+    result = webui.run_tool("finance", "check_balance", "not a dict")
+    assert result["reply"].startswith("Error:")
+
+
+class _State:
+    def __init__(self, nxt, messages):
+        self.next = nxt
+        self.values = {"messages": messages}
+
+
+def test_run_query_consumes_stream_and_approval_resumes(monkeypatch):
+    """Regression: the web chat must exhaust the graph stream (like the console)
+    or no final message is ever produced."""
+    from langchain_core.messages import AIMessage
+
+    import src.webui as webui
+
+    class FakeEngine:
+        def __init__(self):
+            self.last = None
+            self.resumed = False
+
+        def stream(self, input_data, config, stream_mode="values"):
+            if input_data is None:
+                self.resumed = True
+                self.last = _State((), [AIMessage(content="after approval")])
+            else:
+                msg = AIMessage(
+                    content="",
+                    tool_calls=[{"name": "transfer_funds", "args": {}, "id": "1", "type": "tool_call"}],
+                )
+                self.last = _State(("human_approval",), [msg])
+            yield self.last
+
+        def get_state(self, config):
+            return self.last
+
+        def update_state(self, config, values, as_node=None):
+            pass
+
+    engine = FakeEngine()
+    monkeypatch.setattr(
+        "src.agents.core.build_jarvis_graph", lambda settings=None, llm=None: engine
+    )
+    monkeypatch.setattr(
+        "src.webui.Settings.from_env", lambda *a, **k: Settings(openai_api_key="test-key")
+    )
+    webui._STORE_READY = True
+    webui._ENGINE = None
+    webui._CONFIG = None
+    webui._APPROVAL_PENDING = None
+
+    result = webui.run_query("anything")
+    assert result["approval_required"] is True
+    assert result["critical"] == ["transfer_funds"]
+
+    assert webui.approve_resume(True) == "after approval"
+    assert engine.resumed is True

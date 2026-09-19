@@ -29,6 +29,7 @@ _ENGINE = None
 _CONFIG = None
 _STORE_READY = False
 _APPROVAL_PENDING = None
+_PENDING_TOOL = None
 _LOCK = threading.RLock()
 
 PAGE = """<!doctype html>
@@ -122,6 +123,25 @@ a{color:var(--blue)}
 
 <div class="panel" style="margin-bottom:18px"><h2>Domains &amp; tools</h2><div id="domains"></div></div>
 
+<div class="grid">
+  <div class="panel"><h2>Job runner — fire any cron job now</h2>
+    <div class="domains" id="jobbuttons"></div>
+    <div class="count" style="margin-top:6px">Runs with this process's autonomy (dashboard approvals are gated here, not via the scheduler).</div>
+    <pre id="jobout" style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:10px;max-height:220px;overflow:auto;font-size:12px;white-space:pre-wrap"></pre>
+  </div>
+  <div class="panel"><h2>Tool console — run any tool directly</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <select id="tc_domain" style="flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px"></select>
+      <select id="tc_tool" style="flex:1.4;background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px"></select>
+    </div>
+    <input type="text" id="tc_args" placeholder='args as JSON, e.g. {"amount": 100, "recipient": "vendor"}'
+      style="width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px 10px;margin-bottom:8px">
+    <div id="tc_deco" class="count" style="margin-bottom:8px;font-family:monospace;font-size:12px;white-space:pre-wrap"></div>
+    <button id="tc_run">Run</button> <button id="tc_approve" class="deny" style="display:none">Approve</button> <button id="tc_deny" class="deny" style="display:none">Deny</button>
+    <div class="msg jarvis" id="tc_out" style="margin-top:10px;display:none"></div>
+  </div>
+</div>
+
 <div class="panel chat">
   <h2>Ask JARVIS</h2>
   <div class="msgs" id="msgs"></div>
@@ -147,6 +167,8 @@ function esc(s){const d=document.createElement("div");d.textContent=s;return d.i
 function statusCls(x){return "st-"+String(x).toLowerCase();}
 function render(s){
   $("clock").textContent=new Date().toLocaleString();
+  renderJobs(s.schedule);
+  renderToolConsole(s.domains);
   $("treasury").textContent=money(s.company.balance)+" "+s.company.currency;
   const p=s.payments;
   const m=$("mode");m.textContent="PAYMENTS: "+p.mode.toUpperCase();m.className="badge "+(p.mode==="real"?"real":"sim");
@@ -213,6 +235,52 @@ async function decide(v){
   msg(d.reply||d.error||"done","jarvis");
   refresh();
 }
+let toolState={domain:"",tool:"",approval:false};
+function renderToolConsole(domains){
+  const byTool=[];
+  domains.forEach(d=>d.tools.forEach(t=>byTool.push({domain:d.name,tool:t})));
+  const selD=$("tc_domain"),selT=$("tc_tool");
+  if(selD.options.length!==domains.length||selD.value!==toolState.domain){
+    selD.innerHTML=domains.map(d=>'<option>'+d.name+'</option>').join("");
+    if(toolState.domain)selD.value=toolState.domain;
+  }
+  const dname=selD.value;
+  const dm=domains.find(d=>d.name===dname);
+  const tools=dm?dm.tools:[];
+  if(tools.indexOf(toolState.tool)>-1)selT.value=toolState.tool;
+  selT.innerHTML=tools.map(t=>'<option>'+t+'</option>').join("");
+  if(toolState.tool&&tools.indexOf(toolState.tool)>-1)selT.value=toolState.tool;
+  const deco=$("tc_deco");
+  if(dm&&dm.tools.length===0&&dname==="consult")deco.textContent="executive seat — ask it in the chat panel instead";
+  else deco.textContent="targets: "+tools.join(", ")+"  →  critical tools pause for Approve/Deny";
+}
+async function runTool(){
+  const domain=$("tc_domain").value,tool=$("tc_tool").value;
+  let args={};try{args=JSON.parse($("tc_args").value||"{}");}catch(e){showToolOut("Bad JSON args: "+e.message,true);return;}
+  if(domain&&tool){
+    const r=await fetch("/api/tool",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({domain,tool,args})});
+    const d=await r.json();
+    toolState={domain,tool,approval:!!d.approval_required};
+    showToolOut(d.reply||d.error||"done",!!d.error);
+    $("tc_approve").style.display=toolState.approval?"":"none";
+    $("tc_deny").style.display=toolState.approval?"":"none";
+  }
+}
+async function runJob(name){
+  const r=await fetch("/api/job",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({job:name})});
+  const d=await r.json();
+  $("jobout").textContent=d.ok?(name.toUpperCase()+" →\n"+d.output):("ERROR ("+name+"): "+(d.error||"unknown"));
+}
+function showToolOut(text,bad){const el=$("tc_out");el.style.display="block";el.textContent=text;el.style.color=bad?"var(--red)":"var(--fg)";}
+function renderJobs(sch){
+  const names=["reconcile","finance","overdue_invoices","opportunities","portfolio_review","watchdogs"];
+  $("jobbuttons").innerHTML=names.map(n=>
+    '<button class="compact" data-j="'+n+'">'+n.replace("_"," ")+'</button>').join("");
+  $("jobbuttons").querySelectorAll("button").forEach(b=>b.onclick=()=>{b.disabled=true;runJob(b.dataset.j).finally(()=>b.disabled=false);});
+}
+$("tc_run").onclick=runTool;
+$("tc_approve").onclick=async()=>{const r=await fetch("/api/approve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({approve:true})});const d=await r.json();showToolOut(d.reply,(d.error||"").length>0);$("tc_approve").style.display="none";$("tc_deny").style.display="none";toolState.approval=false;};
+$("tc_deny").onclick=async()=>{const r=await fetch("/api/approve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({approve:false})});const d=await r.json();showToolOut(d.reply,(d.error||"").length>0);$("tc_approve").style.display="none";$("tc_deny").style.display="none";toolState.approval=false;};
 function onSend(){
   const q=$("query").value.trim();if(!q)return;$("query").value="";doAsk(q);
 }
@@ -372,6 +440,12 @@ def run_query(query: str) -> dict:
     from src.tools import CRITICAL_TOOLS
 
     with _LOCK:
+        if _PENDING_TOOL is not None:
+            return {
+                "reply": "A direct tool execution is awaiting your decision. Approve or deny it first.",
+                "approval_required": True,
+                "critical": [_PENDING_TOOL["name"]],
+            }
         if _APPROVAL_PENDING is not None:
             return {
                 "reply": "A critical action is awaiting your decision. Approve or deny it first.",
@@ -386,11 +460,12 @@ def run_query(query: str) -> dict:
             _ENGINE = build_jarvis_graph(settings)
             _CONFIG = {"configurable": {"thread_id": "web_admin_session"}}
 
-        _ENGINE.stream(
+        for _ in _ENGINE.stream(
             {"messages": [("user", query)], "next_agent": "", "approved": False},
             _CONFIG,
             stream_mode="values",
-        )
+        ):
+            pass
         snap = _ENGINE.get_state(_CONFIG)
         if "human_approval" in snap.next:
             last = snap.values["messages"][-1]
@@ -404,16 +479,77 @@ def run_query(query: str) -> dict:
 
 
 def approve_resume(decision: bool) -> str:
-    """Resume the paused graph after the operator approves or denies."""
-    global _APPROVAL_PENDING
+    """Resume the paused action after the operator approves or denies — either a
+    direct tool execution staged by run_tool, or the graph's human_approval gate."""
+    global _APPROVAL_PENDING, _PENDING_TOOL
     with _LOCK:
+        if _PENDING_TOOL is not None:
+            item = _PENDING_TOOL
+            _PENDING_TOOL = None
+            if not decision:
+                return f"Denied — {item['name']} not executed."
+            try:
+                return str(item["fn"](**item["args"]))
+            except Exception as exc:
+                return f"Error: {type(exc).__name__}: {exc}"
         if _APPROVAL_PENDING is None or _ENGINE is None:
             return "No action is pending approval."
         _ENGINE.update_state(_CONFIG, {"approved": decision}, as_node="human_approval")
-        _ENGINE.stream(None, _CONFIG, stream_mode="values")
+        for _ in _ENGINE.stream(None, _CONFIG, stream_mode="values"):
+            pass
         snap = _ENGINE.get_state(_CONFIG)
         _APPROVAL_PENDING = None
         return _final_answer(snap)
+
+
+def run_job(name: str) -> dict:
+    """Run one scheduled job immediately (same functions the scheduler uses)."""
+    from src.cron import JOBS
+
+    _ensure_store()
+    fn = JOBS.get(name)
+    if fn is None:
+        return {"ok": False, "error": f"unknown job '{name}'"}
+    try:
+        return {"ok": True, "output": fn()}
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+def run_tool(domain: str, name: str, args: dict) -> dict:
+    """Execute a single domain tool directly. Critical tools pause for approval
+    unless the process runs under full autonomy."""
+    global _PENDING_TOOL
+    from src.tools import CRITICAL_TOOLS, DOMAIN_TOOLS
+
+    with _LOCK:
+        if _APPROVAL_PENDING is not None:
+            return {
+                "reply": "A critical chat action is awaiting your decision. Approve or deny it first.",
+                "approval_required": True,
+                "critical": _APPROVAL_PENDING.get("critical", []),
+            }
+        if not isinstance(args, dict):
+            return {"reply": "Error: args must be a JSON object of keyword arguments.", "approval_required": False}
+        by_name = {
+            getattr(t, "name", t.__name__): t
+            for t in (DOMAIN_TOOLS.get(domain) or [])
+        }
+        fn = by_name.get(name)
+        if fn is None:
+            return {"reply": f"Error: no tool '{name}' in domain '{domain}'.", "approval_required": False}
+        tool_name = getattr(fn, "name", name)
+        if tool_name in CRITICAL_TOOLS and Settings.from_env(require_key=False).autonomy != "full":
+            _PENDING_TOOL = {"name": tool_name, "fn": fn, "args": args}
+            return {
+                "reply": f"Critical tool '{tool_name}' requires your approval.",
+                "approval_required": True,
+                "critical": [tool_name],
+            }
+        try:
+            return {"reply": str(fn(**args)), "approval_required": False}
+        except Exception as exc:
+            return {"reply": f"Error: {type(exc).__name__}: {exc}", "approval_required": False}
 
 
 def live_state() -> dict:
@@ -473,6 +609,24 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/approve":
             try:
                 return self._send(200, {"reply": approve_resume(bool(body.get("approve"))), "approval_required": False})
+            except Exception as exc:
+                return self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
+
+        if path == "/api/job":
+            name = (body.get("job") or "").strip()
+            if not name:
+                return self._send(400, {"error": "job required"})
+            try:
+                return self._send(200, run_job(name))
+            except Exception as exc:
+                return self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
+
+        if path == "/api/tool":
+            domain, name, args = body.get("domain"), body.get("tool"), body.get("args")
+            if not domain or not name:
+                return self._send(400, {"error": "domain and tool required"})
+            try:
+                return self._send(200, run_tool(domain, name, args))
             except Exception as exc:
                 return self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
 

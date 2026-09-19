@@ -24,6 +24,11 @@ def real_balance() -> str:
     """Read the live treasury balance from the linked account (Plaid)."""
     result = fetch_balance()
     if not result["ok"]:
+        if "plaid" not in payments.providers():
+            return (
+                f"Live rail not linked — Plaid is not configured (PLAID_ACCESS_TOKEN). "
+                f"Ledger balance is {STORE.currency(STORE.data['company']['bank_balance'])}."
+            )
         return f"Error: {result.get('error', 'balance unavailable')}"
     if result.get("amount") is None:
         return (
@@ -38,6 +43,11 @@ def sync_real_balance() -> str:
     company = STORE.data["company"]
     result = fetch_balance()
     if not result["ok"]:
+        if "plaid" not in payments.providers():
+            return (
+                f"Live rail not linked — Plaid is not configured (PLAID_ACCESS_TOKEN). "
+                f"Ledger balance is {STORE.currency(company['bank_balance'])}."
+            )
         return f"Error: {result.get('error', 'balance unavailable')}"
     if result.get("amount") is None:
         return real_balance()
